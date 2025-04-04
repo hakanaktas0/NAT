@@ -1,35 +1,11 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
 from torch_geometric.data import Data, Dataset, DataLoader
-from torch_geometric.nn import GCNConv
-import numpy as np
+
 
 from transformers import GPT2TokenizerFast, GPT2Model
 
-def pseudo_bpe_tokenizer_boundaries(text: str) -> list:
-    """
-    Returns a list of 0/1 boundaries for each character.
-    This is a stub simulating boundary detection from a BPE tokenizer.
-    In practice, you would do something like:
 
-        tokens = bert_tokenizer.tokenize(text)
-        # Convert tokens back to positions/characters ...
-        # Then mark boundary positions with 1.
-    """
-    boundaries = [0]*len(text)
-    # For simplicity: insert a 'boundary' after punctuation, spaces, or at the end.
-    # This is just a dummy rule for demonstration:
-    for i, ch in enumerate(text):
-        if ch.isspace() or ch in {'.', ',', ';', '!', '?'}:
-            boundaries[i] = 1
-
-    if len(text) > 0:
-        boundaries[-1] = 1  # end of the string is always a boundary
-    return boundaries
-
-
-def substring_boundaries(text: str, substring: str) -> list:
+def substring_boundaries(text: str, substring: str) -> list: # TODO CHECK THIS PART
     """
     Return a list of 0/1 boundaries for each character,
     ensuring that occurrences of `substring` are tokenized as standalone pieces.
@@ -63,10 +39,9 @@ class ConditionalTokenizationDataset(Dataset):
                  texts,
                  conditions,
                  substrings=None,
-                 char2idx=None,
-                 embedding_dim=32,
                  transform=None,
                  pre_transform=None,
+                 used_llm='GPT2',
                  device='cuda'):
         """
         texts: list of strings
@@ -79,21 +54,15 @@ class ConditionalTokenizationDataset(Dataset):
         self.texts = texts
         self.conditions = conditions
         self.substrings = substrings if substrings is not None else ["" for _ in texts]
-        self.char2idx = char2idx if char2idx is not None else {}
-        self.embedding_dim = embedding_dim
         self.device = device
+        if used_llm == 'GPT2':
+            self.tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+            self.model = GPT2Model.from_pretrained("gpt2")
+            self.model.eval()  # Set to eval mode
+            self.embedding_layer = self.model.get_input_embeddings()
+        # TODO add support for other LLMs
 
-        self.tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-        self.model = GPT2Model.from_pretrained("gpt2")
-        self.model.eval()  # Set to eval mode
-        self.embedding_layer = self.model.get_input_embeddings()
 
-
-        # If needed, create random embeddings for known chars
-        self.char_embeddings = {}
-        for ch in self.char2idx:
-            # random vector for each character
-            self.char_embeddings[ch] = torch.randn(embedding_dim)
 
     def __len__(self):
         return len(self.texts)
@@ -128,7 +97,6 @@ class ConditionalTokenizationDataset(Dataset):
                 prev = boundaries[i]
         return tokens, mask
 
-        # return tokens, boundaries
 
     def __getitem__(self, idx):
         text = self.texts[idx]

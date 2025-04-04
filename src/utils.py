@@ -4,63 +4,75 @@ from nltk.corpus import words
 import pandas as pd
 from nltk.corpus import brown
 from collections import Counter
+from sklearn.metrics import precision_recall_fscore_support
+
 
 def evaluate(model, dataloader):
-    """
-    Evaluates the model on a given dataloader and returns accuracy.
-    Accuracy = #correct boundary predictions / total boundaries
-    """
     model.eval()
-    total_correct = 0
-    total_count = 0
+    all_preds = []
+    all_labels = []
 
     with torch.no_grad():
         for batch in dataloader:
-            # batch.x: [num_nodes, embedding_dim]
-            # batch.edge_index: [2, num_edges]
-            # batch.y: [num_nodes] with 0/1 boundaries
-            # batch.condition: [1] specifying 0/1 condition
-            logits = model(batch.x, batch.edge_index,batch.substring_embed,batch.batch)
-
-            # Convert logits to predictions (threshold=0 for BCEWithLogits)
+            logits = model(batch.x, batch.edge_index, batch.substring_embed, batch.batch)
             preds = (logits >= 0).long()
-            # Count how many are correct
-            correct = (preds == batch.y.long()).sum().item()
-            total_correct += correct
-            total_count += batch.y.numel()
+            all_preds.extend(preds.cpu().tolist())
+            all_labels.extend(batch.y.long().cpu().tolist())
 
-    accuracy = total_correct / total_count if total_count > 0 else 0.0
-    return accuracy
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        all_labels, all_preds, average='binary', pos_label=1
+    )
+
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "accuracy": sum([p == l for p, l in zip(all_preds, all_labels)]) / len(all_labels)
+    }
 
 
-
-
-def generate_data(num_samples = 1000):
+def generate_data(num_samples=1000, balanced=True,vocabulary_word_size=5000):
     # word_list = words.words()
     def generate_sentence(word_count):
         return ' '.join(random.choices(word_list, k=word_count))
 
     word_freq = Counter(w.lower() for w in brown.words())
 
-    word_list = [word for word, freq in word_freq.most_common(1500)][500:]
+    word_list = [word for word, freq in word_freq.most_common(vocabulary_word_size)]
     substring_pool = ["test", "count", "token", "data", "check"]
     data = []
     texts = []
     conditions = []
     substrings = []
+    if balanced:
+        # each iteration adds 2 samples when balanced
+        num_samples = num_samples // 2
     for _ in range(num_samples):
-        condition = random.choice(["normal", "counting"])
-        condition = 'normal'
-        substring = random.choice(substring_pool)
-        if condition == "normal":
-            text = generate_sentence(random.randint(4, 10))
-        else:
-            text = generate_sentence(random.randint(4, 10))
-            # Ensure the substring is in the text
+        if balanced:
+            text = generate_sentence(random.randint(20, 40))
+            substring = random.choice(substring_pool)
             text += ' ' + substring
-        texts.append(text)
-        conditions.append(condition)
-        substrings.append(substring)
+            # APPEND TWICE TO USE THE SAME SENTENCE BOTH FOR NORMAL AND COUNTING
+            texts.append(text)
+            texts.append(text)
+            conditions.append('normal')
+            conditions.append('counting')
+            substrings.append(substring)
+            substrings.append(substring)
+        else:
+            condition = random.choice(["normal", "counting"])
+            condition = 'normal'
+            substring = random.choice(substring_pool)
+            if condition == "normal":
+                text = generate_sentence(random.randint(20, 40))
+            else:
+                text = generate_sentence(random.randint(20, 40))
+                # Ensure the substring is in the text
+                text += ' ' + substring
+            texts.append(text)
+            conditions.append(condition)
+            substrings.append(substring)
+
     return texts, conditions, substrings
 
 
