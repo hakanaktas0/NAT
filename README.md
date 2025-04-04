@@ -1,4 +1,4 @@
-how to run: python te.py (working dir should be src)
+how to run: python run.py (working dir should be src)
 
 generate_data() function uses 1000 words from the brown dataset, I didnt take the most common 1000 because there were just filler words like to, in etc. so I took between 500 to 1500
 
