@@ -24,7 +24,7 @@ class ConditionalGNN(nn.Module):
 
         self.relu = nn.ReLU()
 
-    def forward(self, x, edge_index, condition,substring_embed):
+    def forward(self, x, edge_index,substring_embed,batch):
         """
         x: [num_nodes, in_channels]
         condition: [1]-shaped tensor with condition index
@@ -34,13 +34,14 @@ class ConditionalGNN(nn.Module):
 
         # We want to broadcast cond_emb to each node in x
         # x: [num_nodes, in_channels], so replicate cond_emb for each node:
-        num_nodes = x.size(0)
-        substring_embed = substring_embed.repeat(num_nodes, 1)  # [num_nodes, condition_emb_dim]
+        # num_nodes = x.size(0)
+        # substring_embed = substring_embed[batch]
+        # substring_embed = substring_embed.repeat(num_nodes, 1)  # [num_nodes, condition_emb_dim]
 
-        substring_embed = substring_embed * condition
+        substring_embed_batched = substring_embed[batch]
 
         # Concat
-        x_cond = torch.cat([x, substring_embed], dim=-1)  # [num_nodes, in_channels + condition_emb_dim]
+        x_cond = torch.cat([x, substring_embed_batched], dim=-1)  # [num_nodes, in_channels + condition_emb_dim]
 
         # Pass through GCN layers
         for conv in self.convs:

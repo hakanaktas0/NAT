@@ -20,7 +20,7 @@ def evaluate(model, dataloader):
             # batch.edge_index: [2, num_edges]
             # batch.y: [num_nodes] with 0/1 boundaries
             # batch.condition: [1] specifying 0/1 condition
-            logits = model(batch.x, batch.edge_index, batch.condition,batch.substring_embed)
+            logits = model(batch.x, batch.edge_index,batch.substring_embed,batch.batch)
 
             # Convert logits to predictions (threshold=0 for BCEWithLogits)
             preds = (logits >= 0).long()

@@ -175,7 +175,7 @@ class ConditionalTokenizationDataset(Dataset):
         )
 
         # We can store the condition + substring if needed
-        data.condition = cond_tensor
-        data.substring_embed = self.embedding_layer(self.tokenizer(substring, return_tensors="pt")['input_ids'].view(1, -1)).view(-1)
+        # data.condition = cond_tensor.view(1,-1)
+        data.substring_embed = self.embedding_layer(self.tokenizer(substring, return_tensors="pt")['input_ids'].view(1, -1)).view(1,-1) * cond_tensor
 
         return data.to(self.device)

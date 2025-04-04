@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch_geometric.data import Data, Dataset, DataLoader
+# from torch_geometric.data import Data, Dataset, DataLoader
 from torch_geometric.nn import GCNConv
+from torch_geometric.loader import DataLoader
 import numpy as np
 from dataset import ConditionalTokenizationDataset
 from models import ConditionalGNN
@@ -30,9 +31,11 @@ nltk.download('brown')
 # ]
 
 if torch.cuda.is_available():
-    device = torch.device('cuda')
+    device = torch.device('cuda:0')
+    print('USING CUDA')
 else:
     device = torch.device('cpu')
+    print('USING CPU')
 
 texts, conditions, substrings = generate_data(500)
 
@@ -40,14 +43,16 @@ texts, conditions, substrings = generate_data(500)
 dataset = ConditionalTokenizationDataset(
     texts, conditions, substrings,
     char2idx=None,  # or supply a dictionary
-    embedding_dim=32
+    embedding_dim=32,
+    device=device
 )
 
 val_texts, val_conditions, val_substrings = generate_data(100)
 
 val_dataset = ConditionalTokenizationDataset(
     val_texts, val_conditions, val_substrings,
-    char2idx=None, embedding_dim=32
+    char2idx=None, embedding_dim=32,
+    device=device
 )
 
 # Wrap in dataloader
@@ -65,11 +70,11 @@ for epoch in range(1000000):
     total_loss = 0
     for batch in dataloader:
         # In PyG, if batch_size>1, we get a merged graph, but here it’s 1 for illustration
-        x, edge_index, y, substring_embed = batch.x, batch.edge_index, batch.y, batch.substring_embed
-        condition = batch.condition  # shape [batch_size=1, 1]
+        x, edge_index, y, substring_embed, batch_vector = batch.x, batch.edge_index, batch.y, batch.substring_embed, batch.batch
+        # condition = batch.condition  # shape [batch_size=1, 1]
 
         optimizer.zero_grad()
-        logits = model(x, edge_index, condition, substring_embed)
+        logits = model(x, edge_index, substring_embed,batch_vector)
 
         # We have a boundary label for each node
         loss = criterion(logits, y)
