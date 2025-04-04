@@ -11,3 +11,4 @@ what happens is, the substring embed is multiplied with condition which can be 0
 
 I believe the GNN is not fully connected and only the ones next to each other are connected.
 
+UPDATE : BATCHING IS NOT WORKING FOR SOME REASON, I WILL INVESTIGATE. OTHER THAN THAT, it is very low (sometimes as low as 20 sometimes as high as 80ish) accuracy on validation set before training and over 99 after training. Validation includes sentences formed using the same words in the training set but the samples are different.
