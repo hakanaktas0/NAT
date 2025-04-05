@@ -3,9 +3,25 @@ import torch.nn as nn
 import torch.optim as optim
 from torch_geometric.loader import DataLoader
 from dataset import ConditionalTokenizationDataset
-from models import ConditionalGNN
+from models import ConditionalGNN, ConditionalGAT, ConditionalMPNN
 from utils import evaluate, generate_data
 import nltk
+import numpy as np
+import random
+
+def seed(seed=0):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+seed(157)
+print("All seeds set.")
+
+
 nltk.download('words')
 nltk.download('brown')
 
@@ -49,9 +65,16 @@ if use_wandb:
         }
     )
 
+# TODO WORDS ONLY TESTED USING GPT2 TOKENIZER - SHOULD BE TESTED FOR DIFFERENT LLMs
+string_to_add = ['bedroom', 'mailbox', 'football', 'breakdown', 'fingerprint', 'underdog', 'smartphone', 'website',
+                 'headphone', 'database', 'keyboard']
+string_to_search = ['room', 'mail', 'ball', 'down', 'print', 'dog', 'phone', 'site', 'head', 'data', 'board']
+
+texts, conditions, substrings = generate_data(num_samples=train_data_size,balanced=balanced_train_data,vocabulary_word_size=vocabulary_word_size,string_to_add=string_to_add,string_to_search=string_to_search)
+
+val_texts, val_conditions, val_substrings = generate_data(num_samples=val_data_size,balanced=balanced_val_data,vocabulary_word_size=vocabulary_word_size,string_to_add=string_to_add,string_to_search=string_to_search)
 
 
-texts, conditions, substrings = generate_data(num_samples=train_data_size,balanced=balanced_train_data,vocabulary_word_size=vocabulary_word_size)
 
 # Create dataset
 dataset = ConditionalTokenizationDataset(
@@ -59,7 +82,6 @@ dataset = ConditionalTokenizationDataset(
     device=device
 )
 
-val_texts, val_conditions, val_substrings = generate_data(num_samples=val_data_size,balanced=balanced_val_data,vocabulary_word_size=vocabulary_word_size)
 
 val_dataset = ConditionalTokenizationDataset(
     val_texts, val_conditions, val_substrings,
@@ -72,7 +94,14 @@ dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 val_dataloader = DataLoader(val_dataset, batch_size=1, shuffle=False)
 
 # Instantiate model
-model = ConditionalGNN(in_channels=768, condition_emb_dim=768, hidden_dim=hidden_dim, num_layers=layer_count).to(device)
+if model_spec == 'GCN':
+    model = ConditionalGNN(in_channels=768, condition_emb_dim=768, hidden_dim=hidden_dim, num_layers=layer_count).to(device)
+if model_spec == 'GAT':
+    model = ConditionalGAT(in_channels=768, condition_emb_dim=768, hidden_dim=hidden_dim, num_layers=layer_count).to(device)
+if model_spec == 'MPNN':
+    model = ConditionalMPNN(in_channels=768,condition_emb_dim=768,hidden_dim=hidden_dim,num_layers=layer_count).to(device)
+
+
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 criterion = nn.BCEWithLogitsLoss()  # since we’re predicting boundary 0 or 1
 

@@ -5,12 +5,10 @@ from torch_geometric.data import Data, Dataset, DataLoader
 from transformers import GPT2TokenizerFast, GPT2Model
 
 
-def substring_boundaries(text: str, substring: str) -> list: # TODO CHECK THIS PART
+def substring_boundaries(text: str, substring: str,boundaries : list) -> list:
     """
-    Return a list of 0/1 boundaries for each character,
-    ensuring that occurrences of `substring` are tokenized as standalone pieces.
+    After BPE, if the substring is tokenized into multiple tokens, make it one token again.
     """
-    boundaries = [0] * len(text)
     start_index = 0
 
     # For each occurrence, set boundary on start-1 (if valid) and end
@@ -25,7 +23,8 @@ def substring_boundaries(text: str, substring: str) -> list: # TODO CHECK THIS P
         # Mark boundary at the end of substring
         end_pos = idx + len(substring) - 1
         boundaries[end_pos] = 1
-
+        for i in range(idx,end_pos):
+            boundaries[i] = 0
         start_index = end_pos + 1
 
     # Also mark the end of the entire string as a boundary if not already
@@ -46,9 +45,7 @@ class ConditionalTokenizationDataset(Dataset):
         """
         texts: list of strings
         conditions: list of strings (e.g. ['normal', 'counting', ...])
-        substrings: list of substrings (same length as texts, used only if condition='counting')
-        char2idx: dict to map characters to integer embeddings
-        embedding_dim: dimension for random embedding initialization if char not in char2idx
+        substrings: list of substrings (used only if condition='counting')
         """
         super().__init__(transform, pre_transform)
         self.texts = texts
@@ -102,14 +99,8 @@ class ConditionalTokenizationDataset(Dataset):
         text = self.texts[idx]
         condition = self.conditions[idx]
         substring = self.substrings[idx]
-
-        x = self.get_character_embeddings(text)
         # 1) Build node features (one node per character)
-        #    We will have x.shape = (num_chars, embedding_dim)
-        # char_embs = []
-        # for ch in text:
-        #     char_embs.append(self.get_character_embedding(ch).unsqueeze(0))
-        # x = torch.cat(char_embs, dim=0) if len(char_embs) > 0 else torch.zeros((0, self.embedding_dim))
+        x = self.get_character_embeddings(text)
 
         # 2) Build adjacency (chain edges) for each consecutive character
         num_nodes = len(text)
@@ -124,15 +115,14 @@ class ConditionalTokenizationDataset(Dataset):
 
         # 3) Build the label y = boundary(0/1) for each character
         if condition == "normal":
-            # boundaries = pseudo_bpe_tokenizer_boundaries(thext)
             tokens, boundaries = self.get_boundaries(text)
         else:  # counting mode
-            boundaries = substring_boundaries(text, substring)
+            tokens, boundaries = self.get_boundaries(text) # Get boundaries
+            boundaries = substring_boundaries(text, substring,boundaries) # make sure the substring is tokenized as 1 token
 
         y = torch.tensor(boundaries, dtype=torch.float)
 
-        # 4) Optionally, store the condition in a numeric format
-        #    For simplicity: 0 = normal, 1 = counting
+
         cond_val = 0 if condition == "normal" else 1
         cond_tensor = torch.tensor([cond_val], dtype=torch.float)
 
@@ -142,8 +132,7 @@ class ConditionalTokenizationDataset(Dataset):
             y=y
         )
 
-        # We can store the condition + substring if needed
-        # data.condition = cond_tensor.view(1,-1)
+        # multiply the substring embed with condition, if condition is normal, the embedding will be all 0s, if coundting, the embedding will be the substring embedding
         data.substring_embed = self.embedding_layer(self.tokenizer(substring, return_tensors="pt")['input_ids'].view(1, -1)).view(1,-1) * cond_tensor
 
         return data.to(self.device)
