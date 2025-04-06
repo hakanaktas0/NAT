@@ -126,7 +126,7 @@ class DynamicRNNModel(nn.Module):
                 # Assume all sequences are same length if lengths not provided
                 lengths = [x.size(1)] * x.size(0)
             # Pack the sequence
-            x = pack_padded_sequence(x, lengths, batch_first=True)
+            x = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
 
         # Process with RNN
         output, _ = self.rnn(x)
@@ -150,29 +150,3 @@ class DynamicRNNModel(nn.Module):
         # Apply final transformation
         result = self.output_layer(last_outputs)
         return result
-
-
-def create_model(
-    input_dim, hidden_dim=128, output_dim=10, num_layers=2, rnn_type="lstm"
-):
-    """
-    Helper function to create a model with default parameters.
-
-    Args:
-        input_dim (int): Dimension of input embeddings
-        hidden_dim (int): Dimension of hidden state
-        output_dim (int): Dimension of output prediction
-        num_layers (int): Number of RNN layers
-        rnn_type (str): Type of RNN ('lstm', 'gru', or 'rnn')
-
-    Returns:
-        DynamicRNNModel: Instantiated model
-    """
-    return DynamicRNNModel(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        num_layers=num_layers,
-        rnn_type=rnn_type,
-        dropout=0.2,
-    )

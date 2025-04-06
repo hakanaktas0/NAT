@@ -1,16 +1,16 @@
-import torch
-from torch.utils.data import DataLoader
-import numpy as np
 import time
 import os
-from tqdm import tqdm
-import wandb
+import argparse
 
+import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
-
-# Import Zeus for energy monitoring
+from torch.utils.data import DataLoader
+from torchinfo import summary
+import numpy as np
+from tqdm import tqdm
+import wandb
 from zeus.monitor import ZeusMonitor
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
@@ -318,16 +318,15 @@ def train_rnn(
                     }
                 )
 
-        # Save checkpoint every epoch
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": train_loss,
-            },
-            f"{save_dir}/checkpoint_epoch_{epoch+1}.pt",
-        )
+    # Save checkpoint every epoch
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": train_loss,
+        },
+        f"{save_dir}/final_model.pt",
+    )
 
     # End overall energy monitoring
     overall_energy_stats = overall_monitor.end_window("overall_training")
@@ -347,38 +346,89 @@ def train_rnn(
 
 
 if __name__ == "__main__":
+    # Argument parsing
+    parser = argparse.ArgumentParser(description="Train RNN model on embeddings")
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        required=True,
+        help="Directory containing the model files",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=32, help="Batch size for training"
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=10, help="Number of epochs for training"
+    )
+    parser.add_argument(
+        "--learning_rate", type=float, default=1e-3, help="Learning rate for optimizer"
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device to train on ('cuda' or 'cpu')",
+    )
+    parser.add_argument(
+        "--save_dir",
+        type=str,
+        default="checkpoints",
+        help="Directory to save model checkpoints",
+    )
+    parser.add_argument(
+        "--use_wandb",
+        action="store_true",
+        help="Whether to use Weights & Biases for tracking",
+    )
+    parser.add_argument(
+        "--input_dim", type=int, help="Input dimension for the RNN model"
+    )
+    parser.add_argument(
+        "--hidden_dim", type=int, help="Hidden dimension for the RNN model"
+    )
+    parser.add_argument(
+        "--output_dim", type=int, help="Output dimension for the RNN model"
+    )
+    parser.add_argument(
+        "--num_layers", type=int, help="Number of layers for the RNN model"
+    )
+    parser.add_argument(
+        "--rnn_type", type=str, choices=["lstm", "gru"], help="Type of RNN to use"
+    )
+    parser.add_argument("--dropout", type=float, help="Dropout rate for the RNN model")
+    args = parser.parse_args()
+
     # Create model and datasets
     model = DynamicRNNModel(
-        input_dim=2048,
-        hidden_dim=4096,
-        output_dim=2048,
-        num_layers=4,
-        rnn_type="lstm",
-        dropout=0.1,
+        input_dim=args.input_dim,
+        hidden_dim=args.hidden_dim,
+        output_dim=args.output_dim,
+        num_layers=args.num_layers,
+        rnn_type=args.rnn_type,
+        dropout=args.dropout,
     )  # Initialize your model
 
-    model_dir = "/nfs-share/as3623/models/Llama-3.2-1B/"
+    summary(model, input_size=(1, args.input_dim), batch_dim=0)
 
     train_dataset = EmbeddingsDataset(
-        model_dir, model_dir, split="train", split_files_path="."
+        args.model_dir, split="train", split_files_path="."
     )
-    val_dataset = EmbeddingsDataset(
-        model_dir, model_dir, split="val", split_files_path="."
-    )
+    val_dataset = EmbeddingsDataset(args.model_dir, split="val", split_files_path=".")
 
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
     # Train the model
     trained_model, history = train_rnn(
         model,
         train_dataset,
         val_dataset,
-        batch_size=64,
-        epochs=50,
-        learning_rate=0.001,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
         device="cuda",
-        save_dir="checkpoints50_4096",
-        use_wandb=True,  # Enable wandb tracking
+        save_dir=f"{args.save_dir}-{timestamp}",
+        use_wandb=args.use_wandb,  # Enable wandb tracking
         wandb_project="embedding-rnn",  # Set project name
-        wandb_name=f"rnn-training-{time.strftime('%Y%m%d_%H%M%S')}",  # Create unique run name
+        wandb_name=f"rnn-training-{timestamp}",  # Create unique run name
     )
 
     print("Training completed!")
