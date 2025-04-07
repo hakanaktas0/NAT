@@ -2,7 +2,7 @@ import torch
 from transformers import AutoTokenizer, LlamaForCausalLM
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
-from bootstrapped_llm.model import BootstrappedLlamaModel
+from bootstrapped_llm.boostrapped_model import BootstrappedLlamaModel
 
 
 def main():
@@ -44,8 +44,8 @@ def main():
         rnn_model,
     )
 
-    prompt = "I like to eat apples and bananas. I also like to eat"
-    max_new_tokens = 100
+    prompt = "What is the capital of France? The capital of France is"
+    max_new_tokens = 30
     model_inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(
         device
     )
@@ -53,7 +53,9 @@ def main():
     print(
         tokenizer.batch_decode(
             langauge_model.generate(
-                **model_inputs, max_new_tokens=100, pad_token_id=tokenizer.eos_token_id
+                **model_inputs,
+                max_new_tokens=max_new_tokens,
+                pad_token_id=tokenizer.eos_token_id
             ),
             skip_special_tokens=True,
         )[0],
@@ -64,7 +66,8 @@ def main():
         tokenizer.batch_decode(
             bootstrapped_model.generate(
                 model_inputs,
-                max_new_tokens=100,
+                max_new_tokens=max_new_tokens,
+                tokenize_generated_tokens=True,
             ),
             skip_special_tokens=True,
         )[0]

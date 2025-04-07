@@ -58,8 +58,27 @@ class BootstrappedLlamaModel(torch.nn.Module):
 
         return predicted_embeddings
 
-    def forward(self, input_ids):
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        additional_inputs_no_predict: list[torch.Tensor] = None,
+    ):
         predicted_embeddings = self.predict_embeddings(input_ids)
+        if (
+            additional_inputs_no_predict is not None
+            and len(additional_inputs_no_predict) > 0
+        ):
+
+            predicted_embeddings = torch.cat(
+                [
+                    predicted_embeddings,
+                    *[
+                        self.embeddings.weight[idx.squeeze(0)]
+                        for idx in additional_inputs_no_predict
+                    ],
+                ],
+                dim=0,
+            )
         self.langauge_model.eval()
         with torch.no_grad():
             return self.langauge_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
@@ -68,12 +87,17 @@ class BootstrappedLlamaModel(torch.nn.Module):
         self,
         model_inputs,
         max_new_tokens=10,
+        tokenize_generated_tokens=True,
     ):
         generated_token_ids = []
         for _ in range(max_new_tokens):
-            outputs = self(
-                torch.cat([model_inputs.input_ids, *generated_token_ids], dim=1)
-            )
+            if tokenize_generated_tokens:
+                outputs = self(
+                    torch.cat([model_inputs.input_ids, *generated_token_ids], dim=1)
+                )
+            else:
+                outputs = self(model_inputs.input_ids, generated_token_ids)
+
             next_token_ids = outputs.logits[:, -1:].argmax(-1)
             generated_token_ids.append(next_token_ids)
 
