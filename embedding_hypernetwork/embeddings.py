@@ -30,7 +30,7 @@ def load_llama_embedding_layer(model_path):
     return embeddings
 
 
-def split_embedding(idx: int, tokenizer, vocab_set, embeddings) -> torch.Tensor:
+def split_embedding_idx(idx: int, tokenizer, vocab_set, embeddings) -> torch.Tensor:
     decoded_token = tokenizer.decode([idx])
 
     # IMPORTANT! If a character is represented by multiple tokens, we currently do not consider it.
@@ -57,7 +57,13 @@ class EmbeddingsDataset(Dataset):
     A PyTorch Dataset for loading embeddings.
     """
 
-    def __init__(self, model_files_path, split, split_files_path):
+    def __init__(
+        self,
+        model_files_path,
+        split,
+        split_files_path,
+        output_textual_labels: bool = False,
+    ):
         """
         Initialize the dataset.
 
@@ -75,12 +81,18 @@ class EmbeddingsDataset(Dataset):
         self.split_files_path = split_files_path
 
         self.vocab_set = set(self.tokenizer.get_vocab().keys())
-        self.features, self.labels = self._create_dataset()
+        self.output_textual_labels = output_textual_labels
+
+        self.features, self.labels, self.textual_labels = self._create_dataset()
 
     def _create_dataset(self):
         """
         Create the dataset by splitting the embeddings into individual tokens.
         """
+        if self.output_textual_labels:
+            inverse_vocab_map = {
+                idx: token for token, idx in self.tokenizer.get_vocab().items()
+            }
 
         # Load the split indices
         split_indices = []
@@ -90,8 +102,9 @@ class EmbeddingsDataset(Dataset):
 
         features = []
         labels = []
+        textual_labels = []
         for idx in tqdm(split_indices, desc="Creating dataset"):
-            split = split_embedding(
+            split = split_embedding_idx(
                 idx,
                 self.tokenizer,
                 self.vocab_set,
@@ -101,7 +114,10 @@ class EmbeddingsDataset(Dataset):
                 features.append(split.detach())
                 labels.append(self.embeddings.weight[idx].detach())
 
-        return features, labels
+                if self.output_textual_labels:
+                    textual_labels.append(inverse_vocab_map[idx])
+
+        return features, labels, textual_labels
 
     def __len__(self):
         """Returns the size of the dataset."""
@@ -117,4 +133,11 @@ class EmbeddingsDataset(Dataset):
         Returns:
             tuple: (features, labels) where features are the embeddings and labels are the corresponding token embeddings
         """
+        if self.output_textual_labels:
+            return (
+                self.features[idx],
+                self.labels[idx],
+                self.textual_labels[idx],
+            )
+
         return self.features[idx], self.labels[idx]
