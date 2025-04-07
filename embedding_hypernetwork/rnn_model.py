@@ -34,77 +34,24 @@ class DynamicRNNModel(nn.Module):
         self.num_layers = num_layers
 
         # Create RNN layer
+
         if rnn_type.lower() == "lstm":
-            self.rnn = nn.LSTM(
-                input_dim,
-                hidden_dim,
-                num_layers,
-                batch_first=True,
-                dropout=dropout if num_layers > 1 else 0,
-            )
+            cell_class = nn.LSTM
         elif rnn_type.lower() == "gru":
-            self.rnn = nn.GRU(
-                input_dim,
-                hidden_dim,
-                num_layers,
-                batch_first=True,
-                dropout=dropout if num_layers > 1 else 0,
-            )
+            cell_class = nn.GRU
         else:
-            self.rnn = nn.RNN(
-                input_dim,
-                hidden_dim,
-                num_layers,
-                batch_first=True,
-                dropout=dropout if num_layers > 1 else 0,
-            )
+            cell_class = nn.RNN
+
+        self.rnn = cell_class(
+            input_dim,
+            hidden_dim,
+            num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0,
+        )
 
         # Output layer
         self.output_layer = nn.Linear(hidden_dim, output_dim)
-
-    # def forward(self, x, seq_lengths=None):
-    #     """
-    #     Forward pass through the network.
-
-    #     Args:
-    #         x (Tensor): Input tensor of shape (batch_size, seq_len, input_dim)
-    #                     where seq_len can be variable
-    #         seq_lengths (Tensor): Actual sequence lengths for each batch item
-
-    #     Returns:
-    #         Tensor: Output predictions of shape (batch_size, output_dim)
-    #     """
-    #     batch_size, _, _ = x.size()
-
-    #     # Handle dynamic sequence lengths if provided
-    #     if seq_lengths is not None:
-    #         # Pack padded sequence for efficient computation
-    #         x_packed = nn.utils.rnn.pack_padded_sequence(
-    #             x, seq_lengths.cpu(), batch_first=True, enforce_sorted=False
-    #         )
-
-    #         # Process through RNN
-    #         output_packed, hidden = self.rnn(x_packed)
-
-    #         # Unpack the sequence
-    #         output, _ = nn.utils.rnn.pad_packed_sequence(
-    #             output_packed, batch_first=True
-    #         )
-
-    #         # Get the output for the last actual element of each sequence
-    #         idx = (seq_lengths - 1).view(-1, 1).expand(batch_size, self.hidden_dim)
-    #         time_dimension = 1
-    #         idx = idx.unsqueeze(time_dimension)
-    #         last_output = output.gather(time_dimension, idx).squeeze(time_dimension)
-    #     else:
-    #         # Process through RNN normally, taking the output from the last step
-    #         output, _ = self.rnn(x)
-    #         last_output = output[:, -1]
-
-    #     # Get final prediction
-    #     predictions = self.output_layer(last_output)
-
-    #     return predictions
 
     def forward(self, x, lengths=None):
         """
