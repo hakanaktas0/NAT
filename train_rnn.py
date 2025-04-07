@@ -46,6 +46,27 @@ def collate_with_lengths(batch):
     return padded_sequences, targets, sequence_lengths
 
 
+def embedding_reconstruction_loss(original_embeddings, predicted_embeddings):
+    """
+    Compute the reconstruction loss between original and predicted embeddings.
+
+    Args:
+        original_embeddings: Original embeddings
+        predicted_embeddings: Predicted embeddings
+    Returns:
+        loss: Computed loss
+    """
+
+    alpha = 0.5
+    return alpha * nn.MSELoss()(original_embeddings, predicted_embeddings) + (
+        1 - alpha
+    ) * nn.CosineEmbeddingLoss()(
+        original_embeddings,
+        predicted_embeddings,
+        torch.ones(original_embeddings.shape[0]).to(original_embeddings.device),
+    )
+
+
 def train_rnn(
     model,
     train_dataset,
@@ -125,7 +146,12 @@ def train_rnn(
 
     # Initialize optimizer and loss function
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.MSELoss()
+    # criterion = nn.MSELoss()
+    # criterion_cosine = nn.CosineEmbeddingLoss()
+    # criterion = lambda x, y: criterion_cosine(x, y, torch.ones(x.shape[0]).to(x.device))
+
+    criterion = embedding_reconstruction_loss
+
     # Add L1 loss for MAE calculation
     mae_criterion = nn.L1Loss()
 
@@ -185,7 +211,10 @@ def train_rnn(
             outputs = model(packed_inputs, lengths)
 
             # Compute loss only on the target elements
-            loss = criterion(outputs, targets)
+            loss = criterion(
+                outputs,
+                targets,
+            )
 
             # Compute MAE for tracking regression performance
             mae = mae_criterion(outputs, targets)
@@ -233,7 +262,10 @@ def train_rnn(
                     # Forward pass with packed sequences
                     outputs = model(packed_inputs, lengths)
 
-                    loss = criterion(outputs, targets)
+                    loss = criterion(
+                        outputs,
+                        targets,
+                    )
                     mae = mae_criterion(outputs, targets)
 
                     # Track statistics
