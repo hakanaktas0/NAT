@@ -2,7 +2,7 @@ import torch
 from transformers import AutoTokenizer, LlamaForCausalLM
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
-from bootstrapped_llm.boostrapped_model import BootstrappedLlamaModel
+from bootstrapped_llm.bootstrapped_model import BootstrappedLlamaModel
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
         cache_dir=cache_dir,
     )
 
-    langauge_model = LlamaForCausalLM.from_pretrained(
+    language_model = LlamaForCausalLM.from_pretrained(
         model_dir, cache_dir=cache_dir
     ).to(device)
 
@@ -40,7 +40,7 @@ def main():
 
     bootstrapped_model = BootstrappedLlamaModel(
         tokenizer,
-        langauge_model,
+        language_model,
         rnn_model,
     )
 
@@ -52,7 +52,7 @@ def main():
 
     print(
         tokenizer.batch_decode(
-            langauge_model.generate(
+            language_model.generate(
                 **model_inputs,
                 max_new_tokens=max_new_tokens,
                 pad_token_id=tokenizer.eos_token_id

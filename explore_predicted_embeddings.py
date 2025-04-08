@@ -42,9 +42,7 @@ def experiment_digits(embedding_layer, tokenizer, model):
     with torch.no_grad():
         predicted_embeddings = model(padded_sequences, lengths)
 
-    combined_embeddings = torch.cat(
-        [embeddings, predicted_embeddings], dim=0
-    )  # Concatenate along the last dimension
+    combined_embeddings = torch.cat([embeddings, predicted_embeddings], dim=0)
 
     # Perform t-SNE
     tsne = TSNE(n_components=2, random_state=0)
@@ -104,9 +102,6 @@ def experiment_digits(embedding_layer, tokenizer, model):
 def experiment_embedding_vocab(embedding_layer, tokenizer, model, dataset_split_file):
     "Plot a selection of the vocabulary."
 
-    # TODO Ngl, we could just modify the dataset to have an additional
-    # TODO output of the embedding id to match it with a textual representation.
-
     # Load the test set indices
     split_indices = []
     with open(dataset_split_file, "r") as f:
@@ -143,6 +138,8 @@ def experiment_embedding_vocab(embedding_layer, tokenizer, model, dataset_split_
                 ],
                 dim=0,
             )
+            words.pop(i)
+            print(f"Removing {i}th element from embeddings and words")
 
     lengths = [len(s) for s in splits]
     padded_sequences = torch.nn.utils.rnn.pad_sequence(splits, batch_first=True)
