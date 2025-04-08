@@ -1,16 +1,16 @@
 import torch
 from torch_geometric.data import Data, Dataset, DataLoader
+import os
 
+from transformers import GPT2TokenizerFast, GPT2Model, LlamaModel, PreTrainedTokenizerFast
 
-from transformers import GPT2TokenizerFast, GPT2Model
-
-
-def substring_boundaries(text: str, substring: str,boundaries : list) -> list:
+import copy
+def substring_boundaries(text: str, substring: str,boundaries : list):
     """
     After BPE, if the substring is tokenized into multiple tokens, make it one token again.
     """
     start_index = 0
-
+    borders = []
     # For each occurrence, set boundary on start-1 (if valid) and end
     while True:
         idx = text.find(substring, start_index)
@@ -23,6 +23,8 @@ def substring_boundaries(text: str, substring: str,boundaries : list) -> list:
         # Mark boundary at the end of substring
         end_pos = idx + len(substring) - 1
         boundaries[end_pos] = 1
+        borders.append(idx-1)
+        borders.append(end_pos)
         for i in range(idx,end_pos):
             boundaries[i] = 0
         start_index = end_pos + 1
@@ -30,7 +32,7 @@ def substring_boundaries(text: str, substring: str,boundaries : list) -> list:
     # Also mark the end of the entire string as a boundary if not already
     if len(text) > 0:
         boundaries[-1] = 1
-    return boundaries
+    return boundaries, borders
 
 
 class ConditionalTokenizationDataset(Dataset):
@@ -38,6 +40,7 @@ class ConditionalTokenizationDataset(Dataset):
                  texts,
                  conditions,
                  substrings=None,
+                 connection_distance=1,
                  transform=None,
                  pre_transform=None,
                  used_llm='GPT2',
@@ -51,12 +54,19 @@ class ConditionalTokenizationDataset(Dataset):
         self.texts = texts
         self.conditions = conditions
         self.substrings = substrings if substrings is not None else ["" for _ in texts]
+        self.connection_distance = connection_distance
         self.device = device
+        self.used_llm = used_llm
         if used_llm == 'GPT2':
             self.tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
             self.model = GPT2Model.from_pretrained("gpt2")
             self.model.eval()  # Set to eval mode
             self.embedding_layer = self.model.get_input_embeddings()
+        if used_llm == 'Llama-3.2-1B':
+            self.model = LlamaModel.from_pretrained("meta-llama/Llama-3.2-1B", token=os.getenv('HG_TOKEN'))
+            self.tokenizer = PreTrainedTokenizerFast.from_pretrained("meta-llama/Llama-3.2-1B",
+                                                                token=os.getenv('HG_TOKEN'))
+            self.model.eval()
         # TODO add support for other LLMs
 
 
@@ -65,13 +75,21 @@ class ConditionalTokenizationDataset(Dataset):
         return len(self.texts)
 
     def get_character_embeddings(self, text):
-        chars = list(text)
+        if self.used_llm == 'GPT2':
+            chars = list(text)
 
-        char_input_ids = self.tokenizer(chars, return_tensors="pt")['input_ids'].view(1, -1)
+            char_input_ids = self.tokenizer(chars, return_tensors="pt")['input_ids'].view(1, -1)
 
-        with torch.no_grad():
-            raw_embeddings = self.embedding_layer(char_input_ids)  # Shape: (1, seq_len, hidden_size)
-        return raw_embeddings.squeeze(0)
+            with torch.no_grad():
+                raw_embeddings = self.embedding_layer(char_input_ids)  # Shape: (1, seq_len, hidden_size)
+            return raw_embeddings.squeeze(0)
+        elif self.used_llm == 'Llama-3.2-1B':
+            chars = list(text)
+            char_input_ids = self.tokenizer(chars, return_tensors="pt")['input_ids'][:,1]
+            with torch.no_grad():
+                raw_embeddings = self.model.embed_tokens(char_input_ids)
+            return raw_embeddings.squeeze(0)
+
 
 
     def get_boundaries(self,text):
@@ -112,18 +130,30 @@ class ConditionalTokenizationDataset(Dataset):
         else:
             edge_index = torch.zeros((2, 0), dtype=torch.long)  # no edges if only one character
 
+        src, dst = [], []
+        for i in range(num_nodes):
+            for offset in range(1, self.connection_distance + 1):
+                if i + offset < num_nodes:
+                    src += [i, i + offset]
+                    dst += [i + offset, i]
+
+        edge_index = torch.tensor([src, dst], dtype=torch.long) if src else torch.zeros((2, 0), dtype=torch.long)
 
         # 3) Build the label y = boundary(0/1) for each character
         if condition == "normal":
             tokens, boundaries = self.get_boundaries(text)
+            _ , borders = substring_boundaries(text, substring, copy.deepcopy(boundaries))
         else:  # counting mode
             tokens, boundaries = self.get_boundaries(text) # Get boundaries
-            boundaries = substring_boundaries(text, substring,boundaries) # make sure the substring is tokenized as 1 token
+            boundaries,borders = substring_boundaries(text, substring,boundaries) # make sure the substring is tokenized as 1 token
 
         y = torch.tensor(boundaries, dtype=torch.float)
 
+        if condition == "normal":
+            cond_val = 0
+        else:
+            cond_val = 1
 
-        cond_val = 0 if condition == "normal" else 1
         cond_tensor = torch.tensor([cond_val], dtype=torch.float)
 
         data = Data(
@@ -131,8 +161,25 @@ class ConditionalTokenizationDataset(Dataset):
             edge_index=edge_index,
             y=y
         )
+        data.condition = cond_val
+
+        data.borders = borders
+
 
         # multiply the substring embed with condition, if condition is normal, the embedding will be all 0s, if coundting, the embedding will be the substring embedding
-        data.substring_embed = self.embedding_layer(self.tokenizer(substring, return_tensors="pt")['input_ids'].view(1, -1)).view(1,-1) * cond_tensor
+        if self.used_llm == 'GPT2':
+            data.substring_embed = self.embedding_layer(self.tokenizer(substring, return_tensors="pt")['input_ids'].view(1, -1)).view(1,-1) * cond_tensor
+        if self.used_llm == 'Llama-3.2-1B':
+            data.substring_embed = self.model.embed_tokens(self.tokenizer(substring, return_tensors="pt")['input_ids'][:,1]) * cond_tensor
 
         return data.to(self.device)
+
+# class ConditionalTokenizationDatasetHolder(Dataset):
+#     def __init__(self,data,device):
+#         super().__init__()
+#         self.data = data
+#         self.device = device
+#     def __len__(self):
+#         return len(self.data)
+#     def __getitem__(self, idx):
+#         return self.data[idx]

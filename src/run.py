@@ -4,10 +4,15 @@ import torch.optim as optim
 from torch_geometric.loader import DataLoader
 from dataset import ConditionalTokenizationDataset
 from models import ConditionalGNN, ConditionalGAT, ConditionalMPNN
-from utils import evaluate, generate_data
+from utils import evaluate, generate_data, generate_wiki_data
 import nltk
 import numpy as np
 import random
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Loads from .env by default
+
 
 def seed(seed=0):
     random.seed(seed)
@@ -32,11 +37,14 @@ layer_count = 2
 model_spec = 'GCN'
 train_data_size = 1000
 val_data_size = 100
+connection_distance = 1
 balanced_train_data = True
 balanced_val_data = True
-hidden_dim = 128
-vocabulary_word_size = 5000
-used_llm = 'GPT2'
+hidden_dim = 256
+vocabulary_word_size = 1000
+sentence_length = 30
+used_llm = 'Llama-3.2-1B'
+# used_llm = 'GPT2'
 
 if torch.cuda.is_available():
     device = torch.device('cuda:0')
@@ -74,18 +82,24 @@ texts, conditions, substrings = generate_data(num_samples=train_data_size,balanc
 
 val_texts, val_conditions, val_substrings = generate_data(num_samples=val_data_size,balanced=balanced_val_data,vocabulary_word_size=vocabulary_word_size,string_to_add=string_to_add,string_to_search=string_to_search)
 
-
+val_texts, val_conditions, val_substrings = generate_wiki_data(num_samples=val_data_size)
 
 # Create dataset
 dataset = ConditionalTokenizationDataset(
     texts, conditions, substrings,
-    device=device
+    device=device,
+    used_llm=used_llm,
+    connection_distance=connection_distance
 )
+
+
 
 
 val_dataset = ConditionalTokenizationDataset(
     val_texts, val_conditions, val_substrings,
-    device=device
+    device=device,
+    used_llm=used_llm,
+    connection_distance=connection_distance
 )
 
 # Wrap in dataloader
@@ -93,13 +107,18 @@ dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
 val_dataloader = DataLoader(val_dataset, batch_size=1, shuffle=False)
 
+if used_llm == 'GPT2':
+    embedding_size = 768
+if used_llm == 'Llama-3.2-1B':
+    embedding_size = 2048
+
 # Instantiate model
 if model_spec == 'GCN':
-    model = ConditionalGNN(in_channels=768, condition_emb_dim=768, hidden_dim=hidden_dim, num_layers=layer_count).to(device)
+    model = ConditionalGNN(in_channels=embedding_size, condition_emb_dim=embedding_size, hidden_dim=hidden_dim, num_layers=layer_count).to(device)
 if model_spec == 'GAT':
-    model = ConditionalGAT(in_channels=768, condition_emb_dim=768, hidden_dim=hidden_dim, num_layers=layer_count).to(device)
+    model = ConditionalGAT(in_channels=embedding_size, condition_emb_dim=embedding_size, hidden_dim=hidden_dim, num_layers=layer_count).to(device)
 if model_spec == 'MPNN':
-    model = ConditionalMPNN(in_channels=768,condition_emb_dim=768,hidden_dim=hidden_dim,num_layers=layer_count).to(device)
+    model = ConditionalMPNN(in_channels=embedding_size,condition_emb_dim=embedding_size,hidden_dim=hidden_dim,num_layers=layer_count).to(device)
 
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -114,6 +133,9 @@ for epoch in range(1000000):
     print(f"Recall: {results['recall']:.4f}")
     print(f"Precision: {results['precision']:.4f}")
     print(f"F1: {results['f1']:.4f}")
+    print(f"Balanced Accuracy : {results['balanced_accuracy']:.4f}")
+    print(f"Counting Accuracy : {results['counting_accuracy']:.4f}")
+    print(f"Non Counting Accuracy : {results['non_counting_accuracy']:.4f}")
     if use_wandb:
         wandb.log(results)
 
