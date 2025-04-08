@@ -156,5 +156,6 @@ for epoch in range(1000000):
         total_loss += loss.item()
     if use_wandb:
         wandb.log({'loss': total_loss})
-
+    if epoch % 10 == 0:
+        torch.save(model.state_dict(), f"./model_save/save_{epoch}.pth")
     print(f"Epoch {epoch}, Loss: {total_loss:.4f}")
