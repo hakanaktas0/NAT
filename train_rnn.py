@@ -46,7 +46,7 @@ def collate_with_lengths(batch):
     return padded_sequences, targets, sequence_lengths
 
 
-def embedding_reconstruction_loss(original_embeddings, predicted_embeddings):
+def embedding_reconstruction_loss(original_embeddings, predicted_embeddings, alpha=0.5):
     """
     Compute the reconstruction loss between original and predicted embeddings.
 
@@ -57,13 +57,23 @@ def embedding_reconstruction_loss(original_embeddings, predicted_embeddings):
         loss: Computed loss
     """
 
-    alpha = 0.5
     return alpha * nn.MSELoss()(original_embeddings, predicted_embeddings) + (
         1 - alpha
     ) * nn.CosineEmbeddingLoss()(
         original_embeddings,
         predicted_embeddings,
         torch.ones(original_embeddings.shape[0]).to(original_embeddings.device),
+    )
+
+
+def load_model(model, args):
+    # load the model state dict
+    model.load_state_dict(
+        torch.load(
+            args.trained_model_path,
+            weights_only=False,
+            map_location=args.device,
+        )["model_state_dict"]
     )
 
 
@@ -74,12 +84,13 @@ def train_rnn(
     batch_size=32,
     epochs=10,
     learning_rate=0.001,
-    device="cuda",
+    device="cpu",
     save_dir="checkpoints",
     use_wandb=False,
     wandb_project="rnn-training",
     wandb_entity=None,
     wandb_name=None,
+    combined_loss_alpha=1,
 ):
     """
     Train an RNN model on the provided EmbeddingsDataset.
@@ -97,9 +108,10 @@ def train_rnn(
         wandb_project: WandB project name
         wandb_entity: WandB entity (username or team name)
         wandb_name: WandB run name
+        combined_loss_alpha: Alpha value for combined loss. 0 makes it cosine similarity, 1 makes it MSE
 
     Returns:
-        Trained model and training history
+        Trained model
     """
     # Initialize wandb if enabled
     if use_wandb:
@@ -112,6 +124,7 @@ def train_rnn(
             "num_layers": model.num_layers if hasattr(model, "num_layers") else None,
             "rnn_type": model.rnn_type if hasattr(model, "rnn_type") else None,
             "task_type": "regression",
+            "combined_loss_alpha": combined_loss_alpha,
         }
         wandb.init(
             project=wandb_project, entity=wandb_entity, name=wandb_name, config=config
@@ -147,13 +160,17 @@ def train_rnn(
     # Initialize optimizer and loss function
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     # criterion = nn.MSELoss()
-    # criterion_cosine = nn.CosineEmbeddingLoss()
-    # criterion = lambda x, y: criterion_cosine(x, y, torch.ones(x.shape[0]).to(x.device))
 
-    criterion = embedding_reconstruction_loss
+    criterion = lambda x, y: embedding_reconstruction_loss(
+        x,
+        y,
+        alpha=combined_loss_alpha,
+    )
 
     # Add L1 loss for MAE calculation
-    mae_criterion = nn.L1Loss()
+    mae_metric = nn.L1Loss()
+    mse_metric = nn.MSELoss()
+    cosine_metric = nn.CosineEmbeddingLoss()
 
     # Ensure model is on the specified device
     device = torch.device(
@@ -163,17 +180,6 @@ def train_rnn(
 
     # Create save directory if it doesn't exist
     os.makedirs(save_dir, exist_ok=True)
-
-    # Track metrics for plotting - replace accuracy with MAE
-    history = {
-        "train_loss": [],
-        "train_mae": [],
-        "val_loss": [],
-        "val_mae": [],
-        "epoch_energy": [],
-        "validation_energy": [],
-        "avg_iteration_energy": [],
-    }
 
     best_val_loss = float("inf")
 
@@ -217,7 +223,7 @@ def train_rnn(
             )
 
             # Compute MAE for tracking regression performance
-            mae = mae_criterion(outputs, targets)
+            mae = mae_metric(outputs, targets)
             train_maes.append(mae.item())
 
             # Backward pass and optimize
@@ -235,18 +241,17 @@ def train_rnn(
         # Calculate training metrics
         train_loss = np.mean(train_losses)
         train_mae = np.mean(train_maes)
-        history["train_loss"].append(train_loss)
-        history["train_mae"].append(train_mae)
 
         # Calculate average iteration energy
         avg_iter_energy = np.mean(iteration_energies)
-        history["avg_iteration_energy"].append(avg_iter_energy)
 
         # Validation phase
         if valid_dataset:
             model.eval()
             val_losses = []
             val_maes = []  # Track MAE instead of accuracy
+            val_mses = []
+            val_cosines = []
 
             overall_monitor.begin_window(f"validation_epoch_{epoch+1}")
 
@@ -266,22 +271,29 @@ def train_rnn(
                         outputs,
                         targets,
                     )
-                    mae = mae_criterion(outputs, targets)
+                    mae = mae_metric(outputs, targets)
+                    mse = mse_metric(outputs, targets)
+                    cosine_loss = cosine_metric(
+                        outputs,
+                        targets,
+                        torch.ones(outputs.shape[0]).to(outputs.device),
+                    )
 
                     # Track statistics
                     val_losses.append(loss.item())
                     val_maes.append(mae.item())
+                    val_mses.append(mse.item())
+                    val_cosines.append(cosine_loss.item())
 
             # Calculate validation metrics
             val_loss = np.mean(val_losses)
             val_mae = np.mean(val_maes)
-            history["val_loss"].append(val_loss)
-            history["val_mae"].append(val_mae)
+            val_mse = np.mean(val_mses)
+            val_cosine = np.mean(val_cosines)
 
             # End validation energy monitoring
             val_energy_stats = overall_monitor.end_window(f"validation_epoch_{epoch+1}")
             val_energy = val_energy_stats.total_energy
-            history["validation_energy"].append(val_energy)
 
             # Save best model
             if val_loss < best_val_loss:
@@ -301,11 +313,10 @@ def train_rnn(
             # End epoch energy monitoring
             epoch_energy_stats = overall_monitor.end_window(f"epoch_{epoch+1}")
             epoch_energy = epoch_energy_stats.total_energy
-            history["epoch_energy"].append(epoch_energy)
 
             print(
-                f"Epoch {epoch+1}/{epochs} - {epoch_time:.2f}s - Train Loss: {train_loss:.4f} - "
-                f"Train MAE: {train_mae:.4f} - Val Loss: {val_loss:.4f} - Val MAE: {val_mae:.4f} - "
+                f"Epoch {epoch+1}/{epochs} - {epoch_time:.2f}s - Train Loss: {train_loss:.8f} - "
+                f"Train MAE: {train_mae:.8f} - Val Loss: {val_loss:.8f} - Val MAE: {val_mae:.8f} - "
                 f"Energy: {epoch_energy:.2f}J - Val Energy: {val_energy:.2f}J - Avg Iter Energy: {avg_iter_energy:.2f}J"
             )
 
@@ -317,6 +328,8 @@ def train_rnn(
                         "train/mae": train_mae,
                         "val/loss": val_loss,
                         "val/mae": val_mae,
+                        "val/mse": val_mse,
+                        "val/cosine_similarity": val_cosine,
                         "energy/epoch": epoch_energy,
                         "energy/validation": val_energy,
                         "energy/avg_iteration": avg_iter_energy,
@@ -330,7 +343,6 @@ def train_rnn(
             # End epoch energy monitoring (no validation)
             epoch_energy_stats = overall_monitor.end_window(f"epoch_{epoch+1}")
             epoch_energy = epoch_energy_stats.total_energy
-            history["epoch_energy"].append(epoch_energy)
 
             print(
                 f"Epoch {epoch+1}/{epochs} - {epoch_time:.2f}s - Train Loss: {train_loss:.4f} - "
@@ -374,12 +386,96 @@ def train_rnn(
     if use_wandb:
         wandb.finish()
 
-    return model, history
+    return model
+
+
+def validate_rnn(
+    model,
+    val_dataset,
+    batch_size=32,
+    device="cpu",
+):
+    """
+    Validate the RNN model on the provided EmbeddingsDataset.
+
+    Args:
+        model: The RNN model to validate
+        val_dataset: An EmbeddingsDataset instance for validation
+        batch_size: Batch size for validation
+        device: Device to validate on ('cuda' or 'cpu')
+
+    Returns:
+        Validation loss and MAE
+    """
+    # Create data loader with the new collate function
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        collate_fn=collate_with_lengths,
+    )
+
+    # Initialize loss function
+    criterion = nn.MSELoss()
+
+    # Ensure model is on the specified device
+    device = torch.device(
+        device if torch.cuda.is_available() and device == "cuda" else "cpu"
+    )
+    model = model.to(device)
+
+    # Validation phase
+    model.eval()
+    val_losses = []
+    val_maes = []  # Track MAE instead of accuracy
+    cosine_losses = []
+
+    with torch.no_grad():
+        for inputs, targets, lengths in tqdm(val_loader, desc="Validation"):
+            inputs, targets = inputs.to(device), targets.to(device)
+
+            # Pack the padded sequences
+            packed_inputs = pack_padded_sequence(inputs, lengths, batch_first=True)
+
+            # Forward pass with packed sequences
+            outputs = model(packed_inputs, lengths)
+
+            loss = criterion(outputs, targets)
+            mae = nn.L1Loss()(outputs, targets)
+            cosine_loss = nn.CosineEmbeddingLoss()(
+                outputs,
+                targets,
+                torch.ones(outputs.shape[0]).to(outputs.device),
+            )
+
+            # Track statistics
+            val_losses.append(loss.item())
+            val_maes.append(mae.item())
+            cosine_losses.append(cosine_loss.item())
+
+    # Calculate validation metrics
+    val_loss = np.mean(val_losses)
+    val_mae = np.mean(val_maes)
+    cosine_loss = np.mean(cosine_losses)
+
+    print(
+        f"Validation Loss: {val_loss:.8f} - Validation MAE: {val_mae:.8f}, Cosine Loss: {cosine_loss:.8f}"
+    )
+
+    return val_loss, val_mae, cosine_loss
 
 
 if __name__ == "__main__":
     # Argument parsing
     parser = argparse.ArgumentParser(description="Train RNN model on embeddings")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        required=True,
+        help="Mode to run the script in ('train', 'val' or 'test')",
+    )
     parser.add_argument(
         "--model_dir",
         type=str,
@@ -425,9 +521,28 @@ if __name__ == "__main__":
         "--num_layers", type=int, help="Number of layers for the RNN model"
     )
     parser.add_argument(
-        "--rnn_type", type=str, choices=["lstm", "gru"], help="Type of RNN to use"
+        "--rnn_type",
+        type=str,
+        choices=["lstm", "gru", "rnn"],
+        help="Type of RNN to use",
     )
-    parser.add_argument("--dropout", type=float, help="Dropout rate for the RNN model")
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.1,
+        help="Dropout rate for the RNN model",
+    )
+    parser.add_argument(
+        "--trained_model_path",
+        type=str,
+        help="Path to the trained model",
+    )
+    parser.add_argument(
+        "--combined_loss_alpha",
+        type=float,
+        default=1,
+        help="Alpha value for combined loss. 0 makes it cosine similarity, 1 makes it MSE",
+    )
     args = parser.parse_args()
 
     # Create model and datasets
@@ -440,27 +555,64 @@ if __name__ == "__main__":
         dropout=args.dropout,
     )  # Initialize your model
 
-    summary(model, input_size=(1, args.input_dim), batch_dim=0)
+    if args.mode == "train":
+        summary(model, input_size=(1, args.input_dim), batch_dim=0)
+        train_dataset = EmbeddingsDataset(
+            args.model_dir, split="train", split_files_path="."
+        )
+        val_dataset = EmbeddingsDataset(
+            args.model_dir, split="val", split_files_path="."
+        )
 
-    train_dataset = EmbeddingsDataset(
-        args.model_dir, split="train", split_files_path="."
-    )
-    val_dataset = EmbeddingsDataset(args.model_dir, split="val", split_files_path=".")
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
 
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    # Train the model
-    trained_model, history = train_rnn(
-        model,
-        train_dataset,
-        val_dataset,
-        batch_size=args.batch_size,
-        epochs=args.epochs,
-        learning_rate=args.learning_rate,
-        device="cuda",
-        save_dir=f"{args.save_dir}-{timestamp}",
-        use_wandb=args.use_wandb,  # Enable wandb tracking
-        wandb_project="embedding-rnn",  # Set project name
-        wandb_name=f"rnn-training-{timestamp}",  # Create unique run name
-    )
+        # Train the model
+        trained_model = train_rnn(
+            model,
+            train_dataset,
+            val_dataset,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            learning_rate=args.learning_rate,
+            device=args.device,
+            save_dir=f"{args.save_dir}-{timestamp}",
+            use_wandb=args.use_wandb,  # Enable wandb tracking
+            wandb_project="embedding-rnn",  # Set project name
+            wandb_name=f"rnn-training-{timestamp}",  # Create unique run name
+            combined_loss_alpha=args.combined_loss_alpha,
+        )
 
-    print("Training completed!")
+        print("Training completed!")
+
+    elif args.mode == "val":
+        val_dataset = EmbeddingsDataset(
+            args.model_dir, split="val", split_files_path="."
+        )
+
+        load_model(model, args)
+
+        # Validate the model
+        val_loss, val_mae, cosine_loss = validate_rnn(
+            model,
+            val_dataset,
+            batch_size=args.batch_size,
+            device=args.device,
+        )
+
+    elif args.mode == "test":
+        test_dataset = EmbeddingsDataset(
+            args.model_dir, split="test", split_files_path="."
+        )
+
+        load_model(model, args)
+
+        # Validate the model
+        test_loss, test_mae, cosine_loss = validate_rnn(
+            model,
+            test_dataset,
+            batch_size=args.batch_size,
+            device=args.device,
+        )
+    else:
+        print("Invalid mode. Please choose 'train', 'validate' or 'test'.")
+        exit(1)

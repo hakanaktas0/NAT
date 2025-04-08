@@ -11,18 +11,12 @@ date
 env_python=/nfs-share/as3623/projects/L65-nat/llm-counting-benchmark/.venv/bin/python3
 
 TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
-    --mode 'train' \
+    --mode "val" \
+    --trained_model_path "/nfs-share/as3623/projects/L65-nat/NAT/checkpoints-20250407_172609/best_model.pt" \
     --model_dir "/nfs-share/as3623/models/Llama-3.2-1B/" \
-    --batch_size 256 \
-    --epochs 400 \
-    --learning_rate 5e-3 \
     --device cuda \
-    --save_dir checkpoints \
-    --use_wandb \
     --input_dim 2048 \
     --hidden_dim 1024 \
     --output_dim 2048 \
     --num_layers 4 \
-    --rnn_type "lstm" \
-    --dropout 0.1 \
-    --combined_loss_alpha 0;
+    --rnn_type "lstm";
