@@ -8,25 +8,44 @@ from torch_geometric.data import Data, Dataset, DataLoader
 import os
 from dataset import substring_boundaries
 
-from transformers import GPT2TokenizerFast, GPT2Model, LlamaModel, PreTrainedTokenizerFast
+from transformers import (
+    GPT2TokenizerFast,
+    GPT2Model,
+    LlamaModel,
+    PreTrainedTokenizerFast,
+)
 
-def evaluate(model, dataloader):
+
+def evaluate(model, dataloader, device):
     model.eval()
     all_preds = []
     all_labels = []
 
     counting_acc = []
     non_counting_acc = []
+    all_preds_groupped = []
+    all_labels_groupped = []
     with torch.no_grad():
         for batch in dataloader:
-            logits = model(batch.x, batch.edge_index, batch.substring_embed, batch.batch)
-            preds = (logits >= 0).long()
+            logits = model(
+                batch.x.to(device),
+                batch.edge_index.to(device),
+                batch.substring_embed.to(device),
+                batch.batch.to(device),
+            )
+            preds = (logits >= 0).long().cpu()
             all_preds.extend(preds.cpu().tolist())
-            all_labels.extend(batch.y.long().cpu().tolist())
-            if bool(batch.condition.cpu() == 1):
-                counting_acc.extend((preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist())
+            all_labels.extend(batch.y.long().tolist())
+            all_preds_groupped.append(preds.cpu())
+            all_labels_groupped.append(batch.y.long())
+            if bool(batch.condition == 1):
+                counting_acc.extend(
+                    (preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist()
+                )
             else:
-                non_counting_acc.extend((preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist())
+                non_counting_acc.extend(
+                    (preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist()
+                )
     counting_accuracy = 0
     non_counting_accuracy = 0
     if len(counting_acc) != 0:
@@ -35,33 +54,50 @@ def evaluate(model, dataloader):
         non_counting_accuracy = sum(non_counting_acc) / len(non_counting_acc)
 
     precision, recall, f1, _ = precision_recall_fscore_support(
-        all_labels, all_preds, average='binary', pos_label=1
+        all_labels, all_preds, average="binary", pos_label=1
     )
     balanced_accuracy = balanced_accuracy_score(all_labels, all_preds)
-
+    print(all_preds[0], len(all_preds))
     return {
         "precision": precision,
         "recall": recall,
         "f1": f1,
-        "accuracy": sum([p == l for p, l in zip(all_preds, all_labels)]) / len(all_labels),
-        'balanced_accuracy': balanced_accuracy,
-        'counting_accuracy' : counting_accuracy,
-        'non_counting_accuracy': non_counting_accuracy,
+        "accuracy": sum([p == l for p, l in zip(all_preds, all_labels)])
+        / len(all_labels),
+        "balanced_accuracy": balanced_accuracy,
+        "counting_accuracy": counting_accuracy,
+        "non_counting_accuracy": non_counting_accuracy,
+        "groupped_accuracy": sum(
+            [torch.equal(p, l) for p, l in zip(all_preds_groupped, all_labels_groupped)]
+        )
+        / len(all_labels_groupped),
     }
 
 
-def generate_data(num_samples=1000, balanced=True,vocabulary_word_size=5000,sentence_lenght=30,string_to_add=None,string_to_search=None):
+def generate_data(
+    num_samples=1000,
+    balanced=True,
+    vocabulary_word_size=5000,
+    sentence_lenght=30,
+    string_to_add=None,
+    string_to_search=None,
+):
     # word_list = words.words()
-    def generate_sentence(word_count,substring=None,num_sub=1):
+    def generate_sentence(word_count, substring=None, num_sub=1):
         words = random.choices(word_list, k=word_count)
         if substring is not None:
             for _ in range(num_sub):
                 words.append(substring)
             random.shuffle(words)
-        return ' '.join(words)
+        return " ".join(words)
+
     word_freq = Counter(w.lower() for w in brown.words())
 
-    word_list = [word for word, freq in word_freq.most_common(vocabulary_word_size+250)][250:] # remove the 250 to get rid of too short words
+    word_list = [
+        word for word, freq in word_freq.most_common(vocabulary_word_size + 250)
+    ][
+        250:
+    ]  # remove the 250 to get rid of too short words
     texts = []
     conditions = []
     substrings = []
@@ -69,11 +105,11 @@ def generate_data(num_samples=1000, balanced=True,vocabulary_word_size=5000,sent
         # each iteration adds 2 samples when balanced
         num_samples = num_samples // 2
     for _ in range(num_samples):
-        idx = random.randint(0,10)
+        idx = random.randint(0, 10)
         substring = string_to_add[idx]
         search_substring = string_to_search[idx]
         num_sub = random.randint(1, 5)
-        text = generate_sentence(sentence_lenght,substring=substring,num_sub=num_sub)
+        text = generate_sentence(sentence_lenght, substring=substring, num_sub=num_sub)
 
         if balanced:
             # text = generate_sentence(random.randint(20, 40))
@@ -83,8 +119,8 @@ def generate_data(num_samples=1000, balanced=True,vocabulary_word_size=5000,sent
             # APPEND TWICE TO USE THE SAME SENTENCE BOTH FOR NORMAL AND COUNTING
             texts.append(text)
             texts.append(text)
-            conditions.append('normal')
-            conditions.append('counting')
+            conditions.append("normal")
+            conditions.append("counting")
             substrings.append(search_substring)
             substrings.append(search_substring)
         else:
@@ -100,27 +136,27 @@ def generate_data(num_samples=1000, balanced=True,vocabulary_word_size=5000,sent
     return texts, conditions, substrings
 
 
-
 def generate_wiki_data(num_samples=100):
     from datasets import load_dataset
-    ds = load_dataset("wikimedia/wikipedia", "20231101.en")
+
+    ds = load_dataset("wikimedia/wikipedia", "20231101.en", cache_dir="./.cache")
     all_sentences = []
     i = 0
     while True:
-        sentences = ds['train'][i]['text'].split('\n')
+        sentences = ds["train"][i]["text"].split("\n")
         for j in range(len(sentences)):
             if len(sentences[j]) < 250:
-                sentences[j] = ''
-        while '' in sentences:
-            sentences.remove('')
+                sentences[j] = ""
+        while "" in sentences:
+            sentences.remove("")
         short_sentences = []
         for sentence in sentences:
-            short_sentences.extend(sentence.split('.'))
+            short_sentences.extend(sentence.split("."))
         for j in range(len(short_sentences)):
             if len(short_sentences[j]) < 20:
-                short_sentences[j] = ''
-        while '' in short_sentences:
-            short_sentences.remove('')
+                short_sentences[j] = ""
+        while "" in short_sentences:
+            short_sentences.remove("")
         all_sentences.extend(short_sentences)
         if len(all_sentences) >= num_samples:
             break
@@ -129,9 +165,10 @@ def generate_wiki_data(num_samples=100):
     substrings = []
     conditions = []
     for i in range(num_samples):
-        substrings.append('room')
-        conditions.append('normal')
-    return all_sentences[:num_samples], conditions,substrings
+        substrings.append("room")
+        conditions.append("normal")
+    return all_sentences[:num_samples], conditions, substrings
+
 
 # A BAD IDEA
 # class SyntheticDataGenerator:
