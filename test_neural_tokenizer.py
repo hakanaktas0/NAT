@@ -74,9 +74,9 @@ def main():
             .detach()
             .cpu()
         )
-    # print((a_pred >= 0).int())
-    # print((b_pred >= 0).int())
-    # print(a.y.int())
+    print((a_pred >= 0).int())
+    print((b_pred >= 0).int())
+    print(a.y.int())
 
     print((a_pred >= 0).int() == a.y.int())
     print((b_pred >= 0).int() == b.y.int())

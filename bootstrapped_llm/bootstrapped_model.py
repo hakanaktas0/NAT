@@ -17,7 +17,7 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
     ):
         super(RNNBootstrappedLlamaModel, self).__init__()
         self.tokenizer = tokenizer
-        self.langauge_model = language_model
+        self.language_model = language_model
         self.rnn_model = rnn_model
         self.embeddings = language_model.model.embed_tokens
 
@@ -78,14 +78,14 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
         self.rnn_model.eval()
         with torch.no_grad():
             predicted_embeddings = self.rnn_model(
-                padded_sequences.to(self.langauge_model.device),
+                padded_sequences.to(self.language_model.device),
                 lengths,
             )
 
         if add_bos_token:
             bos_token = self.tokenizer.bos_token_id
             bos_embeddings = self.embeddings(
-                torch.tensor([bos_token]).to(self.langauge_model.device)
+                torch.tensor([bos_token]).to(self.language_model.device)
             )
             predicted_embeddings = torch.cat(
                 [bos_embeddings, predicted_embeddings], dim=0
@@ -114,9 +114,9 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
                 ],
                 dim=0,
             )
-        self.langauge_model.eval()
+        self.language_model.eval()
         with torch.no_grad():
-            return self.langauge_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
+            return self.language_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
 
     def forward_neural_tokenizer(
         self,
@@ -127,9 +127,9 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
             boundaries, input_embeddings
         )
 
-        self.langauge_model.eval()
+        self.language_model.eval()
         with torch.no_grad():
-            return self.langauge_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
+            return self.language_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
 
     def generate(
         self,
