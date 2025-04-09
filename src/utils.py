@@ -67,10 +67,10 @@ def evaluate(model, dataloader, device):
         "balanced_accuracy": balanced_accuracy,
         "counting_accuracy": counting_accuracy,
         "non_counting_accuracy": non_counting_accuracy,
-        "groupped_accuracy": sum(
-            [torch.equal(p, l) for p, l in zip(all_preds_groupped, all_labels_groupped)]
+        "grouped_accuracy": sum(
+            [torch.equal(p, l) for p, l in zip(all_preds_grouped, all_labels_grouped)]
         )
-        / len(all_labels_groupped),
+        / len(all_labels_grouped),
     }
 
 

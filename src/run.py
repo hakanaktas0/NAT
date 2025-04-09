@@ -183,7 +183,7 @@ if use_wandb:
             "val_data_size": val_data_size,
             "balanced_train_data": balanced_train_data,
             "balanced_val_data": balanced_val_data,
-            "hidde_dim": hidden_dim,
+            "hidden_dim": hidden_dim,
             "vocabulary_word_size": vocabulary_word_size,
             "used_llm": used_llm,
             "batch_size": batch_size,
