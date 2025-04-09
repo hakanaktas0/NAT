@@ -37,7 +37,7 @@ print("All seeds set.")
 nltk.download("words")
 nltk.download("brown")
 
-use_wandb = True
+use_wandb = False
 
 
 layer_count = 2
@@ -99,6 +99,7 @@ texts, conditions, substrings = generate_data(
     string_to_add=string_to_add,
     string_to_search=string_to_search,
 )
+
 
 val_texts, val_conditions, val_substrings = generate_data(
     num_samples=val_data_size,

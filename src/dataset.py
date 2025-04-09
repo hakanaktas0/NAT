@@ -19,6 +19,10 @@ def substring_boundaries(text: str, substring: str, boundaries: list):
     start_index = 0
     borders = []
     # For each occurrence, set boundary on start-1 (if valid) and end
+
+    assert (
+        len(substring) > 0
+    ), "Substring must not be empty... Otherwise, you're getting yourself in an infite loop! (Whoop-whoop!)"
     while True:
         idx = text.find(substring, start_index)
         if idx == -1:
@@ -65,7 +69,9 @@ class ConditionalTokenizationDataset(Dataset):
         self.connection_distance = connection_distance
         self.used_llm = used_llm
         if used_llm == "GPT2":
-            self.tokenizer = GPT2TokenizerFast.from_pretrained("gpt2", cache_dir="./.cache")
+            self.tokenizer = GPT2TokenizerFast.from_pretrained(
+                "gpt2", cache_dir="./.cache"
+            )
             self.model = GPT2Model.from_pretrained("gpt2", cache_dir="./.cache")
             self.model.eval()  # Set to eval mode
             self.embedding_layer = self.model.get_input_embeddings()

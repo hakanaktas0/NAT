@@ -6,3 +6,6 @@ checkpoints*
 *.png
 slurm-*.out
 
+src/.cache/
+src/model_save/
+src/wandb/

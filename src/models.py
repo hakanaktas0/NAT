@@ -3,15 +3,11 @@ import torch.nn as nn
 from torch_geometric.nn import GCNConv, GATConv, MessagePassing
 
 
-
 class ConditionalGNN(nn.Module):
-    def __init__(self,
-                 in_channels=768,
-                 condition_emb_dim=768,
-                 hidden_dim=128,
-                 num_layers=2):
+    def __init__(
+        self, in_channels=768, condition_emb_dim=768, hidden_dim=128, num_layers=2
+    ):
         super().__init__()
-
 
         # GCN layers
         self.convs = nn.ModuleList()
@@ -24,7 +20,7 @@ class ConditionalGNN(nn.Module):
 
         self.relu = nn.ReLU()
 
-    def forward(self, x, edge_index,substring_embed,batch):
+    def forward(self, x, edge_index, substring_embed, batch):
         """
         x: [num_nodes, in_channels]
         condition: [1]-shaped tensor with condition index
@@ -41,7 +37,9 @@ class ConditionalGNN(nn.Module):
         substring_embed_batched = substring_embed[batch]
 
         # Concat
-        x_cond = torch.cat([x, substring_embed_batched], dim=-1)  # [num_nodes, in_channels + condition_emb_dim]
+        x_cond = torch.cat(
+            [x, substring_embed_batched], dim=-1
+        )  # [num_nodes, in_channels + condition_emb_dim]
 
         # Pass through GCN layers
         for conv in self.convs:
@@ -53,20 +51,22 @@ class ConditionalGNN(nn.Module):
         return logits
 
 
-
-
 class ConditionalGAT(nn.Module):
-    def __init__(self,
-                 in_channels=768,
-                 condition_emb_dim=768,
-                 hidden_dim=128,
-                 num_layers=2,
-                 heads=4):
+    def __init__(
+        self,
+        in_channels=768,
+        condition_emb_dim=768,
+        hidden_dim=128,
+        num_layers=2,
+        heads=4,
+    ):
         super().__init__()
 
         self.layers = nn.ModuleList()
         self.layers.append(
-            GATConv(in_channels + condition_emb_dim, hidden_dim, heads=heads, concat=True)
+            GATConv(
+                in_channels + condition_emb_dim, hidden_dim, heads=heads, concat=True
+            )
         )
         for _ in range(num_layers - 2):
             self.layers.append(
@@ -88,7 +88,9 @@ class ConditionalGAT(nn.Module):
         # Broadcast substring_embed to each node in the batch
         cond_expanded = substring_embed[batch]  # [num_nodes, condition_emb_dim]
 
-        x = torch.cat([x, cond_expanded], dim=-1)  # [num_nodes, in_channels + condition_emb_dim]
+        x = torch.cat(
+            [x, cond_expanded], dim=-1
+        )  # [num_nodes, in_channels + condition_emb_dim]
 
         for layer in self.layers:
             x = self.relu(layer(x, edge_index))
@@ -97,13 +99,10 @@ class ConditionalGAT(nn.Module):
         return out
 
 
-
 class ConditionalMPNN(nn.Module):
-    def __init__(self,
-                 in_channels=768,
-                 condition_emb_dim=768,
-                 hidden_dim=128,
-                 num_layers=2):
+    def __init__(
+        self, in_channels=768, condition_emb_dim=768, hidden_dim=128, num_layers=2
+    ):
         super().__init__()
         self.layers = nn.ModuleList()
         self.layers.append(CustomMPNNLayer(in_channels + condition_emb_dim, hidden_dim))
@@ -125,7 +124,7 @@ class ConditionalMPNN(nn.Module):
 
 class CustomMPNNLayer(MessagePassing):
     def __init__(self, in_channels, out_channels):
-        super().__init__(aggr='mean')
+        super().__init__(aggr="mean")
         self.lin_msg = nn.Linear(in_channels, out_channels)
         self.lin_update = nn.Linear(in_channels + out_channels, out_channels)
 
