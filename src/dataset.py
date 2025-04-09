@@ -22,7 +22,7 @@ def substring_boundaries(text: str, substring: str, boundaries: list):
 
     assert (
         len(substring) > 0
-    ), "Substring must not be empty... Otherwise, you're getting yourself in an infite loop! (Whoop-whoop!)"
+    ), "Substring must not be empty... Otherwise, you're getting yourself in an infinite loop! (Whoop-whoop!)"
     while True:
         idx = text.find(substring, start_index)
         if idx == -1:
