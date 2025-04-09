@@ -23,8 +23,8 @@ def evaluate(model, dataloader, device):
 
     counting_acc = []
     non_counting_acc = []
-    all_preds_groupped = []
-    all_labels_groupped = []
+    all_preds_grouped = []
+    all_labels_grouped = []
     with torch.no_grad():
         for batch in dataloader:
             logits = model(
@@ -36,8 +36,8 @@ def evaluate(model, dataloader, device):
             preds = (logits >= 0).long().cpu()
             all_preds.extend(preds.cpu().tolist())
             all_labels.extend(batch.y.long().tolist())
-            all_preds_groupped.append(preds.cpu())
-            all_labels_groupped.append(batch.y.long())
+            all_preds_grouped.append(preds.cpu())
+            all_labels_grouped.append(batch.y.long())
             if bool(batch.condition == 1):
                 counting_acc.extend(
                     (preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist()
@@ -57,7 +57,6 @@ def evaluate(model, dataloader, device):
         all_labels, all_preds, average="binary", pos_label=1
     )
     balanced_accuracy = balanced_accuracy_score(all_labels, all_preds)
-    print(all_preds[0], len(all_preds))
     return {
         "precision": precision,
         "recall": recall,
