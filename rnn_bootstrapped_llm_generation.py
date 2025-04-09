@@ -2,7 +2,7 @@ import torch
 from transformers import AutoTokenizer, LlamaForCausalLM
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
-from bootstrapped_llm.bootstrapped_model import BootstrappedLlamaModel
+from bootstrapped_llm.bootstrapped_model import RNNBootstrappedLlamaModel
 
 
 def main():
@@ -38,7 +38,7 @@ def main():
         )["model_state_dict"]
     )
 
-    bootstrapped_model = BootstrappedLlamaModel(
+    bootstrapped_model = RNNBootstrappedLlamaModel(
         tokenizer,
         language_model,
         rnn_model,
