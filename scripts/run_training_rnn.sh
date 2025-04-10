@@ -17,7 +17,7 @@ TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
     --epochs 400 \
     --learning_rate 1e-3 \
     --device cuda \
-    --save_dir checkpoints \
+    --save_dir "./rnn-checkpoints/checkpoints" \
     --use_wandb \
     --input_dim 2048 \
     --hidden_dim 1024 \
