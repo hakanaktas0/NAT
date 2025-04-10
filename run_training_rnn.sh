@@ -16,6 +16,7 @@ TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
     --batch_size 256 \
     --epochs 400 \
     --learning_rate 5e-3 \
+    --use_cosine_scheduler \
     --device cuda \
     --save_dir checkpoints \
     --use_wandb \
@@ -25,4 +26,4 @@ TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
     --num_layers 4 \
     --rnn_type "lstm" \
     --dropout 0.1 \
-    --combined_loss_alpha 0;
+    --combined_loss_alpha 1;

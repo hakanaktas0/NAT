@@ -6,6 +6,7 @@ from transformers import (
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
 from embedding_hypernetwork.embeddings import split_embedding_idx
+from bootstrapped_llm.utils import split_by_boundaries
 
 
 class RNNBootstrappedLlamaModel(torch.nn.Module):
@@ -65,12 +66,8 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
         add_bos_token=True,
     ):
         # Convert input_string and boundaries to list of substrings
-        splits = []
-        start_idx = 0
-        for i, boundary in enumerate(boundaries):
-            if boundary.item() == 1:
-                splits.append(input_embeddings[start_idx : i + 1])
-                start_idx = i + 1
+
+        splits = split_by_boundaries(input_embeddings, boundaries)
 
         lengths = [len(s) for s in splits]
         padded_sequences = torch.nn.utils.rnn.pad_sequence(splits, batch_first=True)

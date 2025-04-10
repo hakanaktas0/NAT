@@ -120,7 +120,6 @@ class ConditionalTokenizationDataset(Dataset):
         offsets = encoded["offset_mapping"][0].tolist()
         input_ids = encoded["input_ids"][0].tolist()
         tokens = self.tokenizer.convert_ids_to_tokens(input_ids)
-
         # Create boundary array
         boundaries = [0] * len(text)
         for i, (start, end) in enumerate(offsets):

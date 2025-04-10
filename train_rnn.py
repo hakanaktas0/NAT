@@ -11,6 +11,7 @@ from torchinfo import summary
 import numpy as np
 from tqdm import tqdm
 import wandb
+import zeus
 from zeus.monitor import ZeusMonitor
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
@@ -84,6 +85,7 @@ def train_rnn(
     batch_size=32,
     epochs=10,
     learning_rate=0.001,
+    use_scheduler=False,
     device="cpu",
     save_dir="checkpoints",
     use_wandb=False,
@@ -102,6 +104,7 @@ def train_rnn(
         batch_size: Batch size for training
         epochs: Number of training epochs
         learning_rate: Learning rate for the optimizer
+        use_scheduler: Whether to use a learning rate scheduler
         device: Device to train on ('cuda' or 'cpu')
         save_dir: Directory to save model checkpoints
         use_wandb: Whether to use Weights & Biases tracking
@@ -118,6 +121,7 @@ def train_rnn(
         config = {
             "batch_size": batch_size,
             "learning_rate": learning_rate,
+            "use_scheduler": use_scheduler,
             "epochs": epochs,
             "model_type": model.__class__.__name__,
             "hidden_dim": model.hidden_dim if hasattr(model, "hidden_dim") else None,
@@ -158,7 +162,8 @@ def train_rnn(
         )
 
     # Initialize optimizer and loss function
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     # criterion = nn.MSELoss()
 
     criterion = lambda x, y: embedding_reconstruction_loss(
@@ -234,9 +239,16 @@ def train_rnn(
             train_losses.append(loss.item())
 
             # End iteration energy monitoring
-            energy_stats = overall_monitor.end_window(f"iteration_{i+1}")
-            iteration_energy = energy_stats.total_energy
-            iteration_energies.append(iteration_energy)
+            try:
+                energy_stats = overall_monitor.end_window(f"iteration_{i+1}")
+                iteration_energy = energy_stats.total_energy
+                iteration_energies.append(iteration_energy)
+            except zeus.device.gpu.common.ZeusGPUNotSupportedError as e:
+                print(f"Issue with energy monitoring: {e}")
+
+        # Step the learning rate scheduler
+        if use_scheduler:
+            scheduler.step()
 
         # Calculate training metrics
         train_loss = np.mean(train_losses)
@@ -292,8 +304,14 @@ def train_rnn(
             val_cosine = np.mean(val_cosines)
 
             # End validation energy monitoring
-            val_energy_stats = overall_monitor.end_window(f"validation_epoch_{epoch+1}")
-            val_energy = val_energy_stats.total_energy
+            try:
+                val_energy_stats = overall_monitor.end_window(
+                    f"validation_epoch_{epoch+1}"
+                )
+                val_energy = val_energy_stats.total_energy
+            except zeus.device.gpu.common.ZeusGPUNotSupportedError as e:
+                val_energy = None
+                print(f"Issue with energy monitoring: {e}")
 
             # Save best model
             if val_loss < best_val_loss:
@@ -311,8 +329,12 @@ def train_rnn(
             epoch_time = time.time() - start_time
 
             # End epoch energy monitoring
-            epoch_energy_stats = overall_monitor.end_window(f"epoch_{epoch+1}")
-            epoch_energy = epoch_energy_stats.total_energy
+            try:
+                epoch_energy_stats = overall_monitor.end_window(f"epoch_{epoch+1}")
+                epoch_energy = epoch_energy_stats.total_energy
+            except zeus.device.gpu.common.ZeusGPUNotSupportedError as e:
+                epoch_energy = None
+                print(f"Issue with energy monitoring: {e}")
 
             print(
                 f"Epoch {epoch+1}/{epochs} - {epoch_time:.2f}s - Train Loss: {train_loss:.8f} - "
@@ -335,14 +357,19 @@ def train_rnn(
                         "energy/avg_iteration": avg_iter_energy,
                         "epoch": epoch,
                         "epoch_time": epoch_time,
+                        "lr": scheduler.get_last_lr()[0],
                     }
                 )
         else:
             epoch_time = time.time() - start_time
 
             # End epoch energy monitoring (no validation)
-            epoch_energy_stats = overall_monitor.end_window(f"epoch_{epoch+1}")
-            epoch_energy = epoch_energy_stats.total_energy
+            try:
+                epoch_energy_stats = overall_monitor.end_window(f"epoch_{epoch+1}")
+                epoch_energy = epoch_energy_stats.total_energy
+            except zeus.device.gpu.common.ZeusGPUNotSupportedError as e:
+                epoch_energy = None
+                print(f"Issue with energy monitoring: {e}")
 
             print(
                 f"Epoch {epoch+1}/{epochs} - {epoch_time:.2f}s - Train Loss: {train_loss:.4f} - "
@@ -359,6 +386,7 @@ def train_rnn(
                         "energy/avg_iteration": avg_iter_energy,
                         "epoch": epoch,
                         "epoch_time": epoch_time,
+                        "lr": scheduler.get_last_lr()[0],
                     }
                 )
 
@@ -373,8 +401,12 @@ def train_rnn(
     )
 
     # End overall energy monitoring
-    overall_energy_stats = overall_monitor.end_window("overall_training")
-    total_energy = overall_energy_stats.total_energy
+    try:
+        overall_energy_stats = overall_monitor.end_window("overall_training")
+        total_energy = overall_energy_stats.total_energy
+    except zeus.device.gpu.common.ZeusGPUNotSupportedError as e:
+        total_energy = None
+        print(f"Issue with energy monitoring: {e}")
 
     if use_wandb:
         wandb.run.summary["total_training_energy"] = total_energy
@@ -543,6 +575,11 @@ if __name__ == "__main__":
         default=1,
         help="Alpha value for combined loss. 0 makes it cosine similarity, 1 makes it MSE",
     )
+    parser.add_argument(
+        "--use_cosine_scheduler",
+        action="store_true",
+        help="Whether to use the cosine annealing scheduler",
+    )
     args = parser.parse_args()
 
     # Create model and datasets
@@ -574,6 +611,7 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             epochs=args.epochs,
             learning_rate=args.learning_rate,
+            use_scheduler=args.use_cosine_scheduler,
             device=args.device,
             save_dir=f"{args.save_dir}-{timestamp}",
             use_wandb=args.use_wandb,  # Enable wandb tracking
