@@ -1,7 +1,7 @@
 import torch
 
-from src.models import ConditionalGNN
-from src.dataset import ConditionalTokenizationDataset
+from neural_tokenizer.models import ConditionalGNN
+from neural_tokenizer.dataset import ConditionalTokenizationDataset
 from torch_geometric.loader import DataLoader
 
 

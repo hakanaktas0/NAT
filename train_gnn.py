@@ -10,14 +10,9 @@ import nltk
 import numpy as np
 from tqdm import tqdm
 
-from dataset import ConditionalTokenizationDataset
-from models import ConditionalGNN, ConditionalGAT, ConditionalMPNN
-from utils import evaluate, generate_data, generate_wiki_data
-
-# from dotenv import load_dotenv
-# import os
-
-# load_dotenv()  # Loads from .env by default
+from neural_tokenizer.dataset import ConditionalTokenizationDataset
+from neural_tokenizer.models import ConditionalGNN, ConditionalGAT, ConditionalMPNN
+from neural_tokenizer.utils import evaluate, generate_data, generate_wiki_data
 
 
 def seed(seed=0):
@@ -53,7 +48,7 @@ sentence_length = 30
 used_llm = "Llama-3.2-1B"
 # used_llm = 'GPT2'
 timestamp = time.strftime("%Y%m%d_%H%M%S")
-save_dir = f"./model_save/checkpoints-{timestamp}"
+save_dir = f"./neural_tokenizer/model_save/checkpoints-{timestamp}"
 # Create save directory if it doesn't exist
 os.makedirs(save_dir, exist_ok=True)
 
