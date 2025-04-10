@@ -15,8 +15,7 @@ TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
     --model_dir "/nfs-share/as3623/models/Llama-3.2-1B/" \
     --batch_size 256 \
     --epochs 400 \
-    --learning_rate 5e-3 \
-    --use_cosine_scheduler \
+    --learning_rate 1e-3 \
     --device cuda \
     --save_dir checkpoints \
     --use_wandb \
@@ -27,3 +26,5 @@ TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
     --rnn_type "lstm" \
     --dropout 0.1 \
     --combined_loss_alpha 1;
+
+    # --use_cosine_scheduler \
