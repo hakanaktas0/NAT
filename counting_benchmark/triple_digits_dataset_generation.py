@@ -28,7 +28,7 @@ def generate_subset(
 ) -> list[tuple[str, str, int]]:
     assert (
         0 < num_different_digits <= 10
-    ), "num_different_digits must be between 0 and 10"
+    ), "num_different_digits must be between 1 and 10"
 
     assert (
         min_num_substring_occurrences > 0
