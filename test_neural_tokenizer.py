@@ -17,7 +17,7 @@ def main():
         cache_dir=cache_dir,
     )
 
-    neural_tokenizer = NeuralTokenizer(gnn_model_dir, device)
+    neural_tokenizer = NeuralTokenizer(gnn_model_dir, model_dir, device)
 
     prompt = "Frogs are interestinganimals that canjump and swim in open water."
     substring = "canjump"
