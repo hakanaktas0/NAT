@@ -3,7 +3,7 @@ from transformers import AutoTokenizer, LlamaForCausalLM
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
 from bootstrapped_llm.bootstrapped_model import RNNBootstrappedLlamaModel
-from bootstrapped_llm.neural_tokenizer import NeuralTokenizer
+from neural_tokenizer.neural_tokenizer import NeuralTokenizer
 
 
 def generate_with_neural_tokenizer(

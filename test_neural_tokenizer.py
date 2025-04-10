@@ -1,14 +1,14 @@
 import torch
 from transformers import AutoTokenizer
 
-from bootstrapped_llm.neural_tokenizer import NeuralTokenizer
+from neural_tokenizer.neural_tokenizer import NeuralTokenizer
 from bootstrapped_llm.utils import split_by_boundaries
 
 
 def main():
     model_dir = "/nfs-share/as3623/models/Llama-3.2-1B/"
     cache_dir = "./.cache"
-    gnn_model_dir = "/nfs-share/as3623/projects/L65-nat/NAT/src/model_save/checkpoints-20250409_020804/save_final_model.pth"
+    gnn_model_dir = "/nfs-share/as3623/projects/L65-nat/NAT/neural_tokenizer/model_save/checkpoints-20250409_020804/save_final_model.pth"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -17,7 +17,7 @@ def main():
         cache_dir=cache_dir,
     )
 
-    neural_tokenizer = NeuralTokenizer(gnn_model_dir, device)
+    neural_tokenizer = NeuralTokenizer(gnn_model_dir, model_dir, device)
 
     prompt = "Frogs are interestinganimals that canjump and swim in open water."
     substring = "canjump"
