@@ -6,6 +6,14 @@ checkpoints*
 *.png
 slurm-*.out
 
-src/.cache/
-src/model_save/
-src/wandb/
+neural_tokenizer/.cache/
+neural_tokenizer/model_save/
+neural_tokenizer/wandb/
+
+.venv
+.cache
+
+results_triple_digits_benchmark
+results_wiki_benchmark
+
+poetry.lock
