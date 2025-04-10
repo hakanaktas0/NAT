@@ -32,12 +32,12 @@ print("All seeds set.")
 nltk.download("words")
 nltk.download("brown")
 
-use_wandb = False
+use_wandb = True
 
 
 layer_count = 2
 model_spec = "GCN"
-train_data_size = 250000
+train_data_size = 10000
 val_data_size = 100
 connection_distance = 1
 balanced_train_data = True
@@ -46,6 +46,9 @@ hidden_dim = 256
 vocabulary_word_size = 1000
 sentence_length = 30
 used_llm = "Llama-3.2-1B"
+# validation_interval = 2
+save_interval = 2
+
 # used_llm = 'GPT2'
 timestamp = time.strftime("%Y%m%d_%H%M%S")
 save_dir = f"./neural_tokenizer/model_save/checkpoints-{timestamp}"
@@ -126,7 +129,7 @@ val_dataset = ConditionalTokenizationDataset(
     connection_distance=connection_distance,
 )
 
-batch_size = 1
+batch_size = 32
 # Wrap in dataloader
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
 
@@ -164,7 +167,7 @@ if model_spec == "MPNN":
 
 
 lr = 1e-3
-epoch_num = 1
+epoch_num = 25
 if use_wandb:
     import wandb
 
@@ -188,13 +191,13 @@ if use_wandb:
     )
 
 
-optimizer = optim.Adam(model.parameters(), lr=lr)
+optimizer = optim.AdamW(model.parameters(), lr=lr)
 criterion = nn.BCEWithLogitsLoss()  # since we’re predicting boundary 0 or 1
 
 # Training loop
 for epoch in range(epoch_num):
-    total_loss = 0
     step = 0
+    total_loss = 0
 
     model.train()
     for batch in tqdm(dataloader, desc=f"Training epoch {epoch}"):
@@ -219,22 +222,22 @@ for epoch in range(epoch_num):
         total_loss += loss.item()
         step += 1
 
-        if step % 1000 == 0:
-            results = evaluate(model, val_dataloader, device)
-            results["loss"] = total_loss / step
-            if use_wandb:
-                wandb.log(results)
-            print(f"Accuracy: {results['accuracy']:.4f}")
-            print(f"Recall: {results['recall']:.4f}")
-            print(f"Precision: {results['precision']:.4f}")
-            print(f"F1: {results['f1']:.4f}")
-            print(f"Balanced Accuracy : {results['balanced_accuracy']:.4f}")
-            print(f"Counting Accuracy : {results['counting_accuracy']:.4f}")
-            print(f"Non Counting Accuracy : {results['non_counting_accuracy']:.4f}")
-            print(f"Correct splits : {results['groupped_accuracy']:.4f}")
+        # if step % validation_interval == 0:
+    results = evaluate(model, val_dataloader, device)
+    results["loss"] = total_loss / step
+    if use_wandb:
+        wandb.log(results)
+    print(f"Accuracy: {results['accuracy']:.4f}")
+    print(f"Recall: {results['recall']:.4f}")
+    print(f"Precision: {results['precision']:.4f}")
+    print(f"F1: {results['f1']:.4f}")
+    print(f"Balanced Accuracy : {results['balanced_accuracy']:.4f}")
+    print(f"Counting Accuracy : {results['counting_accuracy']:.4f}")
+    print(f"Non Counting Accuracy : {results['non_counting_accuracy']:.4f}")
+    print(f"Correct splits : {results['grouped_accuracy']:.4f}")
 
-        if step % 20_000 == 0:
-            torch.save(model.state_dict(), f"./{save_dir}/save_{epoch}.pth")
-        print(f"Epoch {epoch}, Loss: {(total_loss/step):.4f}")
+    if epoch % save_interval == 0:
+        torch.save(model.state_dict(), f"./{save_dir}/save_{epoch}.pth")
+    print(f"Epoch {epoch}, Loss: {(total_loss/step):.4f}")
 
 torch.save(model.state_dict(), f"./{save_dir}/save_final_model.pth")
