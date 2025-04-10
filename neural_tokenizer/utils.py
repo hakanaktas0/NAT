@@ -26,16 +26,36 @@ def evaluate(model, dataloader, device):
             preds = (logits >= 0).long().cpu()
             all_preds.extend(preds.cpu().tolist())
             all_labels.extend(batch.y.long().tolist())
-            all_preds_grouped.append(preds.cpu())
-            all_labels_grouped.append(batch.y.long())
-            if bool(batch.condition == 1):
-                counting_acc.extend(
-                    (preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist()
-                )
-            else:
-                non_counting_acc.extend(
-                    (preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist()
-                )
+            # all_preds_grouped.append(preds.cpu())
+            # all_labels_grouped.append(batch.y.long())
+            # if bool(batch.condition == 1):
+            #     counting_acc.extend(
+            #         (preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist()
+            #     )
+            # else:
+            #     non_counting_acc.extend(
+            #         (preds[batch.borders[0]] == batch.y[batch.borders[0]]).tolist()
+            #     )
+
+            # batched implementation
+            for i in range(torch.max(batch.batch) + 1):
+                all_preds_grouped.append(preds[batch.batch == i].cpu())
+                all_labels_grouped.append(batch.y[batch.batch == i].cpu().long())
+
+                if bool(batch.condition[i] == 1):
+                    counting_acc.extend(
+                        (
+                            preds[batch.batch == i][batch.borders[i]]
+                            == batch.y[batch.batch == i][batch.borders[i]]
+                        ).tolist()
+                    )
+                else:
+                    non_counting_acc.extend(
+                        (
+                            preds[batch.batch == i][batch.borders[i]]
+                            == batch.y[batch.batch == i][batch.borders[i]]
+                        ).tolist()
+                    )
     counting_accuracy = 0
     non_counting_accuracy = 0
     if len(counting_acc) != 0:
