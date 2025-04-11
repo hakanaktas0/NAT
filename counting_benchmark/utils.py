@@ -1,46 +1,8 @@
-from transformers import (
-    PreTrainedModel,
-    PreTrainedTokenizer,
-    AutoTokenizer,
-    AutoModelForCausalLM,
-)
-import torch
 import matplotlib.pyplot as plt
 
 from tabulate import tabulate
 import pandas as pd
 import numpy as np
-
-
-def load_model_and_tokenizer(
-    model_dir: str,
-    device: torch.device | None = None,
-    load_just_tokenizer: bool = False,
-) -> tuple[PreTrainedModel, PreTrainedTokenizer | None]:
-    """
-    Load a model and tokenizer from the specified directory.
-
-    Args:
-    model_dir (str): Path to the model directory.
-
-    Returns:
-    Optional[model]: The loaded model.
-    tokenizer: The loaded tokenizer.
-    """
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_dir, padding_side="left", cache_dir="./.cache"
-    )
-    if tokenizer.pad_token_id is None:
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-
-    if load_just_tokenizer:
-        return None, tokenizer
-
-    model = AutoModelForCausalLM.from_pretrained(
-        model_dir, cache_dir="./.cache", torch_dtype=torch.float16
-    ).to(device)
-
-    return model, tokenizer
 
 
 def pretty_please_print_results(
@@ -124,8 +86,8 @@ def visualize_results(results: list[tuple[int, int]], filename: str) -> None:
         label="Correct Predictions",
         marker="o",
         color="green",
-        s=100,
-        zorder=2,
+        s=50,
+        zorder=3,
     )
 
     plt.scatter(
@@ -133,25 +95,34 @@ def visualize_results(results: list[tuple[int, int]], filename: str) -> None:
         predictions[mismatches],
         color="red",
         marker="x",
-        s=100,
-        zorder=2,
+        s=50,
+        zorder=3,
         label="Mismatch (Predicted)",
     )
 
-    plt.scatter(
-        indices[mismatches],
-        true_values[mismatches],
+    plt.axhline(
+        y=5,
+        linestyle="--",
+        label="True Number of Occurences",
         color="green",
-        marker="o",
-        facecolors="none",
-        s=100,
+        linewidth=1,
         zorder=2,
-        label="Mismatch (True)",
     )
 
+    # plt.scatter(
+    #     indices[mismatches],
+    #     true_values[mismatches],
+    #     color="green",
+    #     marker="o",
+    #     facecolors="none",
+    #     s=100,
+    #     zorder=2,
+    #     label="Mismatch (True)",
+    # )
+
     plt.xlabel("Index")
-    plt.ylabel("Value")
-    plt.title("Comparison of True Values and Predictions (Points Only)")
+    plt.ylabel("Predicted Number of Occurrences")
+    plt.title("Comparison of True and Predicted Number of Occurrences")
     plt.ylim(-0.1, min(10, max(*predictions, *true_values)) + 1)
     # ticks every 1
     plt.yticks(np.arange(0, min(10, max(*predictions, *true_values)) + 1, 1))
@@ -160,4 +131,40 @@ def visualize_results(results: list[tuple[int, int]], filename: str) -> None:
     plt.grid(alpha=0.6, zorder=1)
 
     plt.savefig(filename)
+    plt.close()
+    plt.cla()
+
+    # Calculate max value for bins
+    max_val = min(15, max(*predictions, *true_values)) + 1
+
+    # Create bins with explicit edges, offset by 0.5 to center bars on integers
+    bin_edges = np.arange(-0.5, max_val + 0.5, 1)
+
+    plt.hist(
+        true_values,
+        bins=bin_edges,
+        alpha=0.5,
+        label="True Values",
+        color="blue",
+        align="mid",  # Ensure alignment is at the middle
+        zorder=2,
+    )
+    plt.hist(
+        predictions,
+        bins=bin_edges,
+        alpha=0.5,
+        label="Predictions",
+        color="orange",
+        align="mid",  # Ensure alignment is at the middle
+        zorder=2,
+    )
+
+    # Set x-ticks at integer positions
+    plt.xticks(range(0, max_val))
+    plt.xlabel("Value")
+    plt.ylabel("Frequency")
+    plt.title("Histogram of the True and Predicted Number of Occurences")
+    plt.legend()
+    plt.grid(alpha=0.6)
+    plt.savefig(filename.replace(".png", "_hist.png"))
     plt.close()

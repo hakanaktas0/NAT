@@ -97,3 +97,33 @@ class DynamicRNNModel(nn.Module):
         # Apply final transformation
         result = self.output_layer(last_outputs)
         return result
+
+
+def get_loaded_rnn(model_path, device):
+    """
+    Load the RNN model from the specified path.
+
+    Args:
+        model_path (str): Path to the model file.
+        device (torch.device): Device to load the model on.
+
+    Returns:
+        DynamicRNNModel: Loaded RNN model.
+        int: Connection distance.
+    """
+    rnn_model = DynamicRNNModel(
+        input_dim=2048,
+        hidden_dim=1024,
+        output_dim=2048,
+        num_layers=4,
+        rnn_type="lstm",
+    ).to(device)
+
+    rnn_model.load_state_dict(
+        torch.load(
+            model_path,
+            weights_only=False,
+            map_location=device,
+        )["model_state_dict"]
+    )
+    return rnn_model

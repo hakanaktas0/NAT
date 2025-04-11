@@ -1,4 +1,4 @@
-from counting_benchmark.utils import load_model_and_tokenizer
+from utils.utils import load_model_and_tokenizer
 
 from transformers import PreTrainedTokenizer
 

@@ -1,7 +1,5 @@
 import random
 
-from torch.utils.data import Dataset
-
 
 def find_overlapping(string, substring):
     start = 0
@@ -25,6 +23,7 @@ def generate_subset(
     max_num_substring_occurrences: int,
     force_substring_position_start: bool = False,
     force_substring_position_start_offset: int | None = None,
+    **kwargs,
 ) -> list[tuple[str, str, int]]:
     assert (
         0 < num_different_digits <= 10

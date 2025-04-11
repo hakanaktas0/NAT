@@ -113,7 +113,15 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
             )
         self.language_model.eval()
         with torch.no_grad():
-            return self.language_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
+            return self.language_model.generate(
+                inputs_embeds=predicted_embeddings.unsqueeze(0),
+                attention_mask=torch.ones(
+                    (1, predicted_embeddings.shape[0]),
+                    device=predicted_embeddings.device,
+                ),
+                pad_token_id=self.tokenizer.pad_token_id,
+                max_new_tokens=1,
+            )[:, -1:]
 
     def forward_neural_tokenizer(
         self,
@@ -122,11 +130,20 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
     ):
         predicted_embeddings = self.predict_embeddings_boundaries(
             boundaries, input_embeddings
-        )
+        ).to(self.language_model.device)
 
         self.language_model.eval()
         with torch.no_grad():
-            return self.language_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
+            # return self.language_model(inputs_embeds=predicted_embeddings.unsqueeze(0))
+            return self.language_model.generate(
+                inputs_embeds=predicted_embeddings.unsqueeze(0),
+                attention_mask=torch.ones(
+                    (1, predicted_embeddings.shape[0]),
+                    device=predicted_embeddings.device,
+                ),
+                pad_token_id=self.tokenizer.pad_token_id,
+                max_new_tokens=1,
+            )[:, -1:]
 
     def generate(
         self,
@@ -143,7 +160,6 @@ class RNNBootstrappedLlamaModel(torch.nn.Module):
             else:
                 outputs = self(model_inputs.input_ids, generated_token_ids)
 
-            next_token_ids = outputs.logits[:, -1:].argmax(-1)
-            generated_token_ids.append(next_token_ids)
+            generated_token_ids.append(outputs)
 
         return torch.cat([model_inputs.input_ids, *generated_token_ids], dim=1)

@@ -8,11 +8,11 @@
 hostname
 date
 
-env_python=/nfs-share/as3623/projects/L65-nat/llm-counting-benchmark/.venv/bin/python3
+env_python=/nfs-share/as3623/projects/L65-nat/NAT/.venv/bin/python3
 
 TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
     --mode "val" \
-    --trained_model_path "/nfs-share/as3623/projects/L65-nat/NAT/checkpoints-20250407_172609/best_model.pt" \
+    --trained_model_path "/nfs-share/as3623/projects/L65-nat/NAT/rnn_checkpoints/checkpoints-20250407_172609/best_model.pt" \
     --model_dir "/nfs-share/as3623/models/Llama-3.2-1B/" \
     --device cuda \
     --input_dim 2048 \

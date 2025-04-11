@@ -10,9 +10,10 @@ class BenchmarkDataset(Dataset):
 
     def __getitem__(self, idx):
         text, substring, true_num = self.data[idx]
+        substring = substring.replace("Ġ", " ")
         prompt = (
             "How many times does the substring "
-            + substring.replace("Ġ", " ")
+            + substring
             + f" occur in the following text:\n{text}\nNumber of occurrences (provide only a number): "
         )
-        return prompt, true_num
+        return prompt, substring, true_num
