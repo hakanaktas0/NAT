@@ -1,13 +1,20 @@
 import re
 import torch
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizerBase
 from tqdm import tqdm
+
+from neural_tokenizer.neural_tokenizer import NeuralTokenizer
+from bootstrapped_llm.generation import (
+    generate_with_neural_tokenizer,
+)
+from bootstrapped_llm.bootstrapped_model import RNNBootstrappedLlamaModel
+from counting_benchmark.dataset import BenchmarkDataset
 
 
 def generate_text(
     model: PreTrainedModel,
-    tokenizer: PreTrainedTokenizer,
-    prompt: str,
+    tokenizer: PreTrainedTokenizerBase,
+    prompt: list[str],
     max_new_tokens: int = 50,
 ) -> str:
     """
@@ -32,13 +39,12 @@ def generate_text(
     outputs = model.generate(
         **inputs,
         max_new_tokens=max_new_tokens,
-        do_sample=True,
-        top_k=50,
-        top_p=0.95,
+        # do_sample=True,
+        # top_k=50,
+        # top_p=0.95,
         num_return_sequences=1,
         pad_token_id=tokenizer.pad_token_id,
     )
-
     generated_tokens = outputs[:, inputs["input_ids"].shape[-1] :]
     return tokenizer.batch_decode(
         generated_tokens,
@@ -74,12 +80,21 @@ def process_llm_outputs(output: list[str]) -> list[int]:
 
 
 def evaluate_llm_batch(
-    model: PreTrainedModel,
-    tokenizer: PreTrainedTokenizer,
-    dataset: list[tuple[str, str, int, bool]],
+    model: PreTrainedModel | RNNBootstrappedLlamaModel,
+    tokenizer: PreTrainedTokenizerBase,
+    dataset: BenchmarkDataset,
+    using_bootstrapped_model: bool = False,
+    neural_tokenizer: NeuralTokenizer | None = None,
+    conditioned: bool = False,
     verbose_evalation: bool = False,
     batch_size: int = 1,
 ) -> list[dict[str, int | str]]:
+
+    if using_bootstrapped_model:
+        assert (
+            batch_size == 1
+        ), "Batch size must be 1 for bootstrapped model evaluation."
+        assert neural_tokenizer is not None, "Neural tokenizer must be provided."
 
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -88,11 +103,25 @@ def evaluate_llm_batch(
     )
 
     results = []
-    for prompts, counts in tqdm(dataloader):
+    for prompts, search_substrings, counts in tqdm(dataloader):
 
-        generated_text_batch = generate_text(
-            model, tokenizer, prompts, max_new_tokens=1
-        )
+        if using_bootstrapped_model:
+            generated_text_batch = generate_with_neural_tokenizer(
+                model,
+                neural_tokenizer,
+                tokenizer,
+                prompt=prompts[0],
+                search_substring=search_substrings[0] if conditioned else None,
+                max_new_tokens=1,
+            )
+            generated_text_batch = [generated_text_batch]
+        else:
+            generated_text_batch = generate_text(
+                model,
+                tokenizer,
+                prompts,
+                max_new_tokens=1,
+            )
 
         output_batch = process_llm_outputs(generated_text_batch)
 
@@ -114,7 +143,7 @@ def evaluate_llm_batch(
         [1 for entry in results if entry["true_count"] == entry["predicted_count"]]
     )
     accuracy = correct / len(results)
-    print(f"Accuracy: {accuracy:.2f}")
+    print(f"Accuracy: {accuracy:.4f}")
     print(len(results))
 
     return results

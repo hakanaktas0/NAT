@@ -8,14 +8,14 @@
 hostname
 date
 
-env_python=/nfs-share/as3623/projects/L65-nat/llm-counting-benchmark/.venv/bin/python3
+env_python=/nfs-share/as3623/projects/L65-nat/NAT/.venv/bin/python3
 
 TOKENIZERS_PARALLELISM=false $env_python train_rnn.py \
     --mode 'train' \
     --model_dir "/nfs-share/as3623/models/Llama-3.2-1B/" \
     --batch_size 256 \
     --epochs 400 \
-    --learning_rate 1e-3 \
+    --learning_rate 5e-3 \
     --device cuda \
     --save_dir "./rnn-checkpoints/checkpoints" \
     --use_wandb \

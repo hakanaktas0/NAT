@@ -1,25 +1,18 @@
 import torch
-from transformers import AutoTokenizer, LlamaForCausalLM
 
 from embedding_hypernetwork.rnn_model import DynamicRNNModel
 from bootstrapped_llm.bootstrapped_model import RNNBootstrappedLlamaModel
+from utils.utils import load_model_and_tokenizer
 
 
 def main():
     model_dir = "/nfs-share/as3623/models/Llama-3.2-1B/"
     cache_dir = "./.cache"
-    rnn_model_dir = "/nfs-share/as3623/projects/L65-nat/NAT/checkpoints-20250407_145814/final_model.pt"
+    rnn_model_dir = "/nfs-share/as3623/projects/L65-nat/NAT/rnn_checkpoints/checkpoints-20250407_145814/final_model.pt"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_dir,
-        cache_dir=cache_dir,
-    )
-
-    language_model = LlamaForCausalLM.from_pretrained(
-        model_dir, cache_dir=cache_dir
-    ).to(device)
+    language_model, tokenizer = load_model_and_tokenizer(model_dir, device)
 
     rnn_model = DynamicRNNModel(
         input_dim=2048,
@@ -55,7 +48,7 @@ def main():
             language_model.generate(
                 **model_inputs,
                 max_new_tokens=max_new_tokens,
-                pad_token_id=tokenizer.eos_token_id
+                pad_token_id=tokenizer.eos_token_id,
             ),
             skip_special_tokens=True,
         )[0],

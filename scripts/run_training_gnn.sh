@@ -8,6 +8,6 @@
 hostname
 date
 
-env_python=/nfs-share/as3623/projects/L65-nat/llm-counting-benchmark/.venv/bin/python3
+env_python=/nfs-share/as3623/projects/L65-nat/NAT/.venv/bin/python3
 
 TOKENIZERS_PARALLELISM=false $env_python train_gnn.py

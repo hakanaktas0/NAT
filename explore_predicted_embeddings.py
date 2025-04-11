@@ -211,7 +211,7 @@ def experiment_embedding_vocab(embedding_layer, tokenizer, model, dataset_split_
 def main():
     # Load the embedding layer
     model_dir = "/nfs-share/as3623/models/Llama-3.2-1B/"
-    rnn_model_dir = "/nfs-share/as3623/projects/L65-nat/NAT/checkpoints-20250407_145814/final_model.pt"
+    rnn_model_dir = "/nfs-share/as3623/projects/L65-nat/NAT/rnn_checkpoints/checkpoints-20250407_145814/final_model.pt"
     dataset_split_file = "./test_indices.txt"
 
     np.random.seed(42)

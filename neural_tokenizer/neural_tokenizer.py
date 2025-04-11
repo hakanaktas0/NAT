@@ -16,7 +16,9 @@ class NeuralTokenizer:
         self.gnn, self.connection_distance = self.initialize_neural_tokenizer(
             gnn_model_path
         )
-        self.lm, self.static_tokenizer = self.initialize_static_tokenizer()
+        lm, self.static_tokenizer = self.initialize_static_tokenizer()
+        self.embed_tokens = copy.deepcopy(lm.embed_tokens)
+        del lm
 
     def initialize_static_tokenizer(self):
         model = LlamaModel.from_pretrained(
@@ -26,6 +28,7 @@ class NeuralTokenizer:
         tokenizer = PreTrainedTokenizerFast.from_pretrained(
             self.language_model_path, cache_dir="./.cache"
         )
+        tokenizer.pad_token = tokenizer.eos_token
         model.eval()
         return model, tokenizer
 
@@ -49,11 +52,14 @@ class NeuralTokenizer:
 
     def get_character_embeddings(self, text):
         chars = list(text)
-        char_input_ids = self.static_tokenizer(chars, return_tensors="pt")["input_ids"][
-            :, 1
-        ]
+        char_input_ids = self.static_tokenizer(
+            chars,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        )["input_ids"][:, 1]
         with torch.no_grad():
-            raw_embeddings = self.lm.embed_tokens(char_input_ids)
+            raw_embeddings = self.embed_tokens(char_input_ids)
         return raw_embeddings.squeeze(0)
 
     def get_boundaries(self, text):
@@ -134,7 +140,7 @@ class NeuralTokenizer:
         # multiply the substring embed with condition, if condition is normal, the embedding will be all 0s, if coundting, the embedding will be the substring embedding
 
         data.substring_embed = (
-            self.lm.embed_tokens(
+            self.embed_tokens(
                 self.static_tokenizer(substring, return_tensors="pt")["input_ids"][:, 1]
             )
             * cond_tensor
